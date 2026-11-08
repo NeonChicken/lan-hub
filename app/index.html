@@ -1,0 +1,1320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LAN Hub</title>
+<link rel="icon" href="assets/app.ico" sizes="16x16 24x24 32x32 48x48 64x64 128x128 256x256">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+<meta name="theme-color" content="#2e222f">
+<style>
+/* Outfit (SIL Open Font License, assets/fonts/OFL.txt), bundled so nothing loads from the internet */
+@font-face{font-family:"Outfit";font-style:normal;font-weight:400 800;font-display:swap;src:url(assets/fonts/outfit-latin.woff2) format("woff2");unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Outfit";font-style:normal;font-weight:400 800;font-display:swap;src:url(assets/fonts/outfit-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C4,U+2113,U+2C60-2C7F,U+A720-A7FF}
+:root{
+  /* resurrect-64 palette (matches the app icon) */
+  --bg:#2e222f; --ink:#2e222f; --surface:#3e3546; --surface-2:#4a3f54;
+  --glass:rgba(255,255,255,.06); --glass-2:rgba(255,255,255,.1); --glass-3:rgba(255,255,255,.16);
+  --solid:rgba(62,53,70,.82); --solid-2:rgba(74,63,84,.94);
+  --stroke:rgba(255,255,255,.13); --stroke-2:rgba(255,255,255,.24);
+  --text:#fbf7fd; --muted:#b8adc2; --dim:#8a7b95;
+  --c1:#f57d4a; --c1d:#9e4539; --c2:#a884f3; --c2d:#905ea9; --c3:#f04f78;
+  --ok:#91db69; --warn:#fbb954; --bad:#e83b3b; --sky:#8fd3ff;
+  --grad:linear-gradient(120deg,var(--c1),var(--c2));
+  --card-w:300px; --gutter:28px;
+  --blur:saturate(160%) blur(18px);
+  --ease:cubic-bezier(.2,.8,.2,1);
+  --font:"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html{scrollbar-gutter:stable}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased}
+body{min-height:100vh;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+input{font:inherit;color:inherit}
+img{display:block}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.85em;background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px;word-break:break-all}
+::selection{background:var(--c2);color:#fff}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:10px}::-webkit-scrollbar-track{background:transparent}
+
+/* ---------- ambient background: static, cheap (no animated blur under glass) ---------- */
+.ambient{position:fixed;inset:0;z-index:-2;overflow:hidden;pointer-events:none;
+  background:radial-gradient(60vmax 60vmax at 95% -10%,rgba(168,132,243,.28),transparent 60%),
+             radial-gradient(55vmax 55vmax at -10% 110%,rgba(245,125,74,.20),transparent 60%),
+             radial-gradient(35vmax 35vmax at 55% 55%,rgba(144,94,169,.16),transparent 60%),var(--bg)}
+/* blurred game art: drawn at 1/8 size then scaled up = ~64x cheaper than blurring full-screen */
+.ambient .bgart{position:absolute;left:0;top:0;width:12.5%;height:12.5%;transform:scale(8);transform-origin:0 0;
+  background-size:cover;background-position:center;filter:blur(5px) saturate(150%);opacity:0;transition:opacity 1s ease}
+.ambient .bgart.on{opacity:.26}
+
+/* ---------- primitives ---------- */
+.glass{background:var(--glass);border:1px solid var(--stroke);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);box-shadow:0 10px 40px -12px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08)}
+.pane{background:var(--solid);border:1px solid var(--stroke);box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.btn{display:inline-flex;align-items:center;gap:.55em;padding:.72em 1.25em;border-radius:12px;font-weight:600;letter-spacing:.01em;transition:transform .15s,background-color .15s,border-color .15s,filter .15s;white-space:nowrap;text-decoration:none;color:inherit}
+.btn svg{width:1.15em;height:1.15em;flex:none}
+.btn:active{transform:scale(.96)}
+.btn-primary{background:#fff;color:#2e222f}
+.btn-primary:hover{background:#f3ecff}
+.btn-grad{background:var(--c1);color:var(--ink);box-shadow:0 4px 0 var(--c1d)}
+.btn-grad:hover{filter:brightness(1.07)}
+.btn-grad:active{transform:translateY(3px);box-shadow:0 1px 0 var(--c1d)}
+.btn-purple{background:var(--c2);color:var(--ink);box-shadow:0 4px 0 var(--c2d)}
+.btn-purple:hover{filter:brightness(1.07)}
+.btn-purple:active{transform:translateY(3px);box-shadow:0 1px 0 var(--c2d)}
+.btn-glass{background:var(--glass-2);border:1px solid var(--stroke)}
+.btn-glass:hover{background:var(--glass-3);border-color:var(--stroke-2)}
+.btn-sm{padding:.5em .9em;font-size:.86rem;border-radius:10px}
+.btn[disabled]{opacity:.4;pointer-events:none}
+.chip{display:inline-flex;align-items:center;gap:.4em;padding:.28em .7em;border-radius:999px;font-size:.78rem;font-weight:600;background:rgba(255,255,255,.08);border:1px solid var(--stroke);white-space:nowrap}
+.chip.lan{background:rgba(145,219,105,.14);border-color:rgba(145,219,105,.4);color:#d4f4bf}
+.chip.online{background:rgba(143,211,255,.12);border-color:rgba(143,211,255,.35);color:#d2efff}
+.chip.couch{background:rgba(240,79,120,.13);border-color:rgba(240,79,120,.4);color:#ffc8d6}
+.chip.notinst{background:rgba(251,185,84,.12);border-color:rgba(251,185,84,.4);color:#ffe1ad}
+.chip.star{background:rgba(168,132,243,.18);border-color:rgba(168,132,243,.5);color:#e3d6ff}
+.dot{width:.5em;height:.5em;border-radius:50%;background:currentColor;display:inline-block}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:50;padding:12px var(--gutter);display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-bottom:1px solid transparent;transition:background-color .25s,border-color .25s}
+.top.scrolled{background:rgba(46,34,47,.72);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom-color:var(--stroke)}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.4rem;letter-spacing:.07em;user-select:none}
+.brand img{width:40px;height:40px;image-rendering:pixelated;filter:drop-shadow(0 4px 10px rgba(0,0,0,.4))}
+.brand .l{color:var(--c1);text-shadow:0 3px 0 var(--c1d)}
+.brand .h{color:var(--c2);text-shadow:0 3px 0 var(--c2d)}
+.search{flex:1 1 220px;max-width:440px;display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:12px;transition:border-color .2s,background-color .2s}
+.search:focus-within{border-color:rgba(168,132,243,.6);background:var(--solid-2)}
+.search input{flex:1;background:none;border:0;outline:0;min-width:0}
+.search svg{width:18px;height:18px;color:var(--muted);flex:none}
+.search kbd{font-family:inherit;font-size:.72rem;color:var(--dim);border:1px solid var(--stroke);padding:1px 6px;border-radius:6px}
+.squad{display:flex;align-items:center;gap:8px;padding:5px 6px 5px 14px;border-radius:12px}
+.squad label{font-size:.82rem;color:var(--muted);white-space:nowrap}
+.squad .num{min-width:2.2ch;text-align:center;font-weight:800;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.squad button{width:30px;height:30px;border-radius:9px;background:var(--glass-2);display:grid;place-items:center;font-size:1.1rem;font-weight:700}
+.squad button:hover{background:var(--glass-3)}
+.spacer{flex:1}
+.iconbtn{width:40px;height:40px;border-radius:12px;display:grid;place-items:center}
+.iconbtn svg{width:20px;height:20px}
+.iconbtn:hover{background:var(--glass-3)}
+.status{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted);padding:9px 12px;border-radius:12px;cursor:default;max-width:340px}
+.status .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.status .dot{width:8px;height:8px;flex:none;background:var(--dim)}
+.status.on .dot{background:var(--ok);box-shadow:0 0 12px var(--ok)}
+.status.off .dot{background:var(--warn)}
+.status.err .dot{background:var(--bad);box-shadow:0 0 12px var(--bad)}
+.status.busy .dot{background:var(--sky);box-shadow:0 0 12px var(--sky);animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.3}}
+
+.banner{margin:4px var(--gutter) 14px;padding:14px 18px;border-radius:16px;display:flex;gap:14px;align-items:center;flex-wrap:wrap;font-size:.93rem;line-height:1.5;position:relative;z-index:6}
+.banner b{color:#fff}
+.banner .x{margin-left:auto}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap;padding:0 var(--gutter) 6px;position:relative;z-index:5}
+.fchip{padding:.5em 1em;border-radius:999px;font-size:.86rem;font-weight:600;color:var(--muted);background:var(--solid);border:1px solid var(--stroke);transition:color .15s,background-color .15s,border-color .15s}
+.fchip:hover{color:var(--text);border-color:var(--stroke-2)}
+.fchip.on{color:#2e222f;background:#fff;border-color:#fff}
+.fchip .n{opacity:.6;margin-left:.35em;font-variant-numeric:tabular-nums}
+.viewtoggle{margin-left:auto;display:flex;gap:4px;padding:4px;border-radius:999px}
+.viewtoggle button{padding:.38em .9em;border-radius:999px;font-size:.82rem;font-weight:600;color:var(--muted)}
+.viewtoggle button.on{background:var(--glass-3);color:var(--text)}
+
+/* ---------- hero billboard ---------- */
+.hero{position:relative;min-height:min(72vh,720px);margin-top:calc(-1 * var(--top-h, 64px));overflow:hidden;contain:paint;
+  display:flex;align-items:flex-end;padding:calc(var(--top-h, 64px) + 20px) var(--gutter) 110px}
+.hero .art{position:absolute;inset:0;background-size:cover;background-position:center 25%;transition:opacity .8s ease,transform 1.4s var(--ease);transform:scale(1.05)}
+.hero .art.show{transform:none}
+.hero::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(46,34,47,.95) 0,rgba(46,34,47,.55) 38%,transparent 70%),linear-gradient(0deg,var(--bg) 0,rgba(46,34,47,.2) 30%,transparent 55%),linear-gradient(180deg,rgba(46,34,47,.7),transparent 25%)}
+.hero .inner{position:relative;z-index:2;max-width:min(620px,100%);padding:28px;border-radius:24px}
+.hero .kicker{display:flex;gap:8px;align-items:center;font-size:.78rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.hero .kicker .bar{width:28px;height:3px;border-radius:3px;background:var(--grad)}
+.hero .logo{max-width:min(420px,100%);max-height:150px;object-fit:contain;object-position:left bottom;filter:drop-shadow(0 6px 24px rgba(0,0,0,.7));margin-bottom:14px}
+.hero h1{font-size:clamp(2rem,4.6vw,3.6rem);line-height:1.02;margin:0 0 14px;font-weight:800;letter-spacing:-.02em;text-wrap:balance}
+.hero p{color:#e6dcea;line-height:1.55;margin:12px 0 22px;font-size:1.02rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.hero .meta,.hero .actions{display:flex;gap:8px;flex-wrap:wrap}
+.hero .actions{gap:10px}
+.hero .pager{display:flex;gap:6px;margin-top:20px}
+.hero .pager button{width:26px;height:4px;border-radius:4px;background:rgba(255,255,255,.25);transition:width .3s,background-color .3s}
+.hero .pager button.on{width:44px;background:#fff}
+.hero-fade-in{animation:heroIn .6s var(--ease) both}
+@keyframes heroIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.hero.slim{height:auto;min-height:0;margin-top:0;padding-top:8px}
+.hero.slim::after,.hero.slim .art,.hero.slim .pager{display:none}
+
+/* ---------- rows ---------- */
+main{position:relative;z-index:2;margin-top:-90px;padding-bottom:60px}
+.hero.slim + main{margin-top:0}
+.row{position:relative;content-visibility:auto;contain-intrinsic-size:auto 250px}
+.row h2{display:flex;align-items:baseline;gap:12px;margin:0 var(--gutter);padding-top:16px;font-size:1.25rem;font-weight:700}
+.row h2 small{color:var(--dim);font-weight:500;font-size:.85rem}
+.row h2 .sub{color:var(--muted);font-weight:400;font-size:.88rem;margin-left:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;scroll-behavior:smooth;padding:16px var(--gutter) 22px;scroll-snap-type:x proximity;scroll-padding-inline:var(--gutter);scrollbar-width:none;overscroll-behavior-x:contain}
+.track::-webkit-scrollbar{display:none}
+.arrow{position:absolute;top:56px;bottom:18px;width:52px;z-index:6;display:grid;place-items:center;opacity:0;transition:opacity .2s}
+.arrow svg{width:30px;height:30px;filter:drop-shadow(0 2px 8px #000)}
+.arrow.l{left:0;background:linear-gradient(90deg,rgba(46,34,47,.85),transparent)}
+.arrow.r{right:0;background:linear-gradient(270deg,rgba(46,34,47,.85),transparent)}
+.row:hover .arrow{opacity:1}
+.arrow[hidden]{display:none}
+
+.card{position:relative;flex:0 0 var(--card-w);aspect-ratio:460/215;border-radius:14px;scroll-snap-align:start;cursor:pointer;outline:none;transition:transform .3s var(--ease)}
+.card::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;opacity:0;transition:opacity .3s;
+  box-shadow:0 22px 46px -14px rgba(0,0,0,.95),0 0 0 2px rgba(255,255,255,.6),0 0 38px -6px rgba(168,132,243,.7)}
+.card .frame{position:absolute;inset:0;border-radius:inherit;overflow:hidden;background:#3e3546;border:1px solid var(--stroke);contain:strict}
+.card img.cover{width:100%;height:100%;object-fit:cover;transition:transform .5s var(--ease)}
+.card.notinst .frame::before{content:"";position:absolute;inset:0;z-index:1;background:rgba(46,34,47,.38);transition:opacity .3s;pointer-events:none}
+.card .shade{position:absolute;inset:0;z-index:1;background:linear-gradient(0deg,rgba(46,34,47,.92) 0,rgba(46,34,47,.2) 48%,transparent 70%);opacity:0;transition:opacity .25s}
+.card .badges{position:absolute;z-index:2;top:8px;left:8px;right:8px;display:flex;justify-content:space-between;gap:6px;pointer-events:none}
+.card .pl{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;font-weight:700;padding:4px 8px;border-radius:8px;background:rgba(46,34,47,.8);border:1px solid rgba(255,255,255,.14)}
+.card .pl svg{width:13px;height:13px}
+.card .flags{display:flex;gap:4px}
+.card .flag{font-size:.66rem;font-weight:800;letter-spacing:.06em;padding:4px 7px;border-radius:7px}
+.flag.lan{background:#91db69;color:#2e222f}
+.flag.couch{background:#f04f78;color:#2e222f}
+.flag.get{background:#fbb954;color:#2e222f}
+.card .info{position:absolute;z-index:2;left:12px;right:12px;bottom:10px;transform:translateY(8px);opacity:0;transition:transform .25s,opacity .25s}
+.card .info b{display:block;font-size:.98rem;font-weight:700;line-height:1.2;text-shadow:0 2px 10px #000;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.card .info span{font-size:.75rem;color:var(--muted);text-transform:capitalize}
+.card .idot{position:absolute;z-index:2;right:10px;bottom:10px;width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok);transition:opacity .25s}
+@media (hover:hover){
+  .card:hover{transform:scale(1.08) translateY(-3px);z-index:4}
+  .card:hover::after{opacity:1}
+  .card:hover img.cover{transform:scale(1.05)}
+  .card:hover .shade,.card:hover .info{opacity:1}
+  .card:hover .info{transform:none}
+  .card:hover .idot,.card:hover .frame::before{opacity:0}
+}
+.card:focus-visible{transform:scale(1.08) translateY(-3px);z-index:4}
+.card:focus-visible::after,.card:focus-visible .shade,.card:focus-visible .info,.card.noart .shade,.card.noart .info{opacity:1}
+.card:focus-visible .info,.card.noart .info{transform:none}
+.card .ph{position:absolute;inset:0;display:grid;place-items:center;padding:14px;text-align:center;font-weight:800;font-size:1.2rem;letter-spacing:.02em;line-height:1.1}
+.card.noart .info b{display:none}
+.track .card:first-child{transform-origin:left center}
+.track .card:last-child{transform-origin:right center}
+.card.more-cards{display:grid;place-items:center;color:var(--muted);font-weight:600;background:var(--solid);border:1px dashed var(--stroke-2);border-radius:14px}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px 14px;padding:14px var(--gutter)}
+.grid .card{flex:none;width:auto}
+.sentinel{height:1px}
+.results-head{margin:8px var(--gutter) 0;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.results-head h2{margin:0;font-size:1.3rem}
+.results-head small{color:var(--muted)}
+.empty{margin:30px var(--gutter);padding:36px;border-radius:20px;text-align:center;color:var(--muted);line-height:1.6}
+.empty b{color:var(--text)}
+
+/* ---------- modal ---------- */
+.overlay{position:fixed;inset:0;z-index:100;background:rgba(30,22,31,.74);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;overscroll-behavior:contain;padding:40px 16px;opacity:0;visibility:hidden;transition:opacity .25s,visibility 0s .25s}
+.overlay.open{opacity:1;visibility:visible;transition:opacity .25s}
+.modal{position:relative;width:min(1000px,100%);border-radius:22px;overflow:hidden;background:rgba(52,42,58,.86);border:1px solid var(--stroke);backdrop-filter:saturate(150%) blur(22px);-webkit-backdrop-filter:saturate(150%) blur(22px);box-shadow:0 40px 120px -20px rgba(0,0,0,.9),inset 0 1px 0 rgba(255,255,255,.08);transform:translateY(20px) scale(.98);transition:transform .4s var(--ease)}
+.overlay.open .modal{transform:none}
+.overlay.fly .modal{transition:none} /* the art flies in: the panel itself doesn't also slide */
+.flyart{position:fixed;z-index:300;pointer-events:none;overflow:hidden;box-shadow:0 30px 80px -24px rgba(0,0,0,.85);will-change:left,top,width,height}
+.flyart img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.mhero{position:relative;width:100%;aspect-ratio:1920/700;min-height:200px;overflow:hidden;background:#3e3546}
+.mhero img.bg,.mhero .bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.mhero.boxart img.blur{position:absolute;left:0;top:0;width:12.5%;height:12.5%;transform:scale(8.4);transform-origin:0 0;object-fit:cover;filter:blur(3px) brightness(.6) saturate(140%)}
+.mhero.boxart img.bg{object-fit:contain;object-position:right center;padding:18px 28px 18px 40%}
+.mhero::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(52,42,58,1) 0,rgba(52,42,58,.4) 45%,transparent 75%)}
+.mhero .lg{position:absolute;z-index:2;left:32px;bottom:22px;max-width:min(380px,60%);max-height:42%;object-fit:contain;object-position:left bottom;filter:drop-shadow(0 6px 22px rgba(0,0,0,.8))}
+.mhero h2{position:absolute;z-index:2;left:32px;right:32px;bottom:18px;margin:0;font-size:clamp(1.7rem,3.5vw,2.6rem);font-weight:800;letter-spacing:-.015em;line-height:1.05;text-shadow:0 4px 30px rgba(0,0,0,.8)}
+.close{position:absolute;z-index:5;top:14px;right:14px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(46,34,47,.7);border:1px solid var(--stroke);transition:transform .2s,background-color .2s}
+.close:hover{transform:rotate(90deg);background:rgba(74,63,84,.9)}
+.close svg{width:20px;height:20px}
+.mbody{padding:8px 32px 32px;display:grid;grid-template-columns:1.6fr 1fr;gap:28px}
+.stagger>*{animation:rise .45s var(--ease) both}
+.stagger>*:nth-child(2){animation-delay:.04s}.stagger>*:nth-child(3){animation-delay:.08s}.stagger>*:nth-child(4){animation-delay:.12s}.stagger>*:nth-child(5){animation-delay:.16s}.stagger>*:nth-child(6){animation-delay:.2s}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.mchips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 16px}
+.bigplayers{display:flex;align-items:center;gap:14px;padding:14px 18px;border-radius:16px;margin-bottom:16px}
+.bigplayers .n{font-size:2rem;font-weight:800;line-height:1;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-variant-numeric:tabular-nums}
+.bigplayers .l{font-size:.82rem;color:var(--muted);line-height:1.35}
+.bigplayers .fit{margin-left:auto;font-size:.8rem;font-weight:700;padding:6px 10px;border-radius:10px}
+.fit.yes{background:rgba(145,219,105,.15);color:#d4f4bf}.fit.no{background:rgba(232,59,59,.14);color:#ffc9c9}
+.desc{color:#ece4f0;line-height:1.65;margin:0 0 16px;font-size:1.02rem}
+.tip{display:flex;gap:12px;padding:14px 16px;border-radius:14px;background:linear-gradient(120deg,rgba(143,211,255,.1),rgba(168,132,243,.1));border:1px solid rgba(168,132,243,.28);line-height:1.5;font-size:.92rem;margin-bottom:18px}
+.tip svg{width:20px;height:20px;flex:none;color:var(--c2);margin-top:2px}
+.mactions{display:flex;gap:10px;flex-wrap:wrap}
+.side dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:9px 14px;font-size:.88rem}
+.side dt{color:var(--dim)}
+.side dd{margin:0;color:#ece4f0;word-break:break-word}
+.side .path{font-family:ui-monospace,Consolas,monospace;font-size:.78rem;color:var(--muted);cursor:pointer}
+.side .path:hover{color:var(--text)}
+.side h4{margin:18px 0 10px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.feats{display:flex;flex-wrap:wrap;gap:6px}
+.feats .chip{font-weight:500;font-size:.74rem}
+.more{padding:0 32px 32px}
+.more h3{margin:0 0 12px;font-size:1.05rem}
+.more .grid{padding:0;grid-template-columns:repeat(4,1fr)}   /* 8 "more like this" cards: always whole rows, no orphan */
+@media (hover:hover){.more .card:hover{transform:scale(1.05)}}
+
+
+/* ---------- settings ---------- */
+.settings{padding:30px 32px 32px}
+.settings h2{margin:0 0 6px;font-size:1.6rem}
+.settings p.lead{color:var(--muted);margin:0 0 20px;line-height:1.55}
+.settings h4{margin:22px 0 10px;font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+.rootlist{display:flex;flex-direction:column;gap:6px}
+.rootlist .r{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-family:ui-monospace,Consolas,monospace;font-size:.84rem}
+.rootlist .r span{flex:1;word-break:break-all}
+.rootlist .r .tag{font-family:var(--font);font-size:.7rem;color:var(--dim);font-weight:600;flex:none}
+.rootlist .r button{color:var(--muted);padding:2px 8px;border-radius:8px}
+.rootlist .r button:hover{color:var(--bad);background:rgba(232,59,59,.12)}
+.addrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.addrow input,.settings input[type=text]{flex:1 1 260px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid var(--stroke);outline:0}
+.addrow input:focus,.settings input[type=text]:focus{border-color:rgba(168,132,243,.6)}
+.toggle{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.92rem}
+.toggle input{width:18px;height:18px;accent-color:var(--c2)}
+.permhead{display:flex;gap:16px;align-items:flex-start;margin-bottom:18px}
+.permhead img{image-rendering:pixelated;flex:none}
+.permhead .lead{margin:0}
+.perm{border-radius:16px;padding:16px 18px;margin-bottom:12px}
+.toggle.big{align-items:flex-start;gap:12px;margin-bottom:6px}
+.toggle.big input{margin-top:3px}
+.toggle.big b{display:block;font-size:1rem;margin-bottom:3px}
+.toggle.big small,.perm small.fine{display:block;color:var(--muted);line-height:1.5;font-size:.84rem}
+.toggle.big .ico{font-size:1.1rem;width:18px;text-align:center}
+.perm .rootlist{margin:10px 0 0 30px}
+.perm .rootlist .r{cursor:pointer;background:rgba(46,34,47,.55);border:1px solid var(--stroke)}
+.perm .rootlist .r input{width:16px;height:16px;accent-color:var(--c2);flex:none}
+.perm .addrow{margin-left:30px}
+.perm > .toggle:not(.big){margin:12px 0 0 30px}
+.perm ul.hosts{margin:6px 0 8px 30px;padding-left:18px;line-height:1.75;font-size:.86rem;color:var(--muted)}
+.perm ul.hosts b{color:var(--text);font-weight:600}
+.perm small.fine{margin-left:30px}
+.perm.always{background:rgba(145,219,105,.08);border:1px solid rgba(145,219,105,.3)}
+.perm.always b{color:#d4f4bf}
+.perm.always ul{margin:8px 0 0;padding-left:20px;line-height:1.7;font-size:.88rem;color:var(--muted)}
+.muted{color:var(--muted);font-size:.9rem;align-self:center}
+.addrow.actions{margin-top:18px;align-items:center}
+
+/* ---------- roulette ---------- */
+.roul{position:fixed;inset:0;z-index:120;display:grid;place-items:center;background:rgba(30,22,31,.75);opacity:0;visibility:hidden;transition:opacity .25s,visibility 0s .25s}
+.roul.open{opacity:1;visibility:visible;transition:opacity .25s}
+.roul .box{width:min(560px,92vw);padding:28px;border-radius:24px;text-align:center}
+.roul .title{font-size:.8rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.roul .slot{position:relative;aspect-ratio:460/215;border-radius:16px;overflow:hidden;border:1px solid var(--stroke);background:#3e3546}
+.roul .slot img{width:100%;height:100%;object-fit:cover}
+.roul .slot .ph{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:1.6rem}
+.roul .slot.win{box-shadow:0 0 0 3px #fff,0 0 60px rgba(168,132,243,.9);animation:pop .5s cubic-bezier(.2,1.6,.4,1)}
+@keyframes pop{from{transform:scale(.92)}to{transform:none}}
+.roul .name{font-size:1.6rem;font-weight:800;margin:18px 0 4px;min-height:1.2em}
+.roul .sub{color:var(--muted);min-height:1.3em;margin-bottom:20px}
+.roul .row2{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+.toasts{position:fixed;z-index:200;left:50%;bottom:24px;transform:translateX(-50%);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{padding:12px 18px;border-radius:14px;font-size:.92rem;max-width:min(560px,92vw);animation:tin .3s var(--ease) both;pointer-events:auto;background:var(--solid-2);border:1px solid var(--stroke);box-shadow:0 12px 40px -10px #000}
+.toast.err{border-color:rgba(232,59,59,.5)}
+.toast.ok{border-color:rgba(145,219,105,.5)}
+@keyframes tin{from{opacity:0;transform:translateY(12px) scale(.97)}to{opacity:1;transform:none}}
+
+footer{padding:24px var(--gutter) 40px;color:var(--dim);font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}
+
+@media (max-width:1180px){ .status .lbl{display:none} }
+@media (max-height:700px) and (min-width:821px){ .hero .logo{max-height:100px} .hero p{-webkit-line-clamp:2} .hero .inner{padding:22px} }
+@media (max-width:820px){
+  :root{--card-w:220px;--gutter:16px}
+  .top{gap:10px}
+  .search{order:9;flex:1 1 100%;max-width:none}
+  .search kbd,.status .lbl,#pick .lbl{display:none}
+  .brand{font-size:1.15rem}
+  .hero{margin-top:0;min-height:0;padding:12px var(--gutter) 18px}
+  .hero .inner{padding:20px;max-width:none;width:100%}
+  .hero .logo{max-height:90px}
+  .hero .pager{display:none}
+  main{margin-top:0}
+  .mhero.boxart img.bg{padding:12px;object-position:center}
+  .mbody{grid-template-columns:1fr;padding:6px 18px 22px}
+  .more{padding:0 18px 22px}
+  .more .grid{grid-template-columns:repeat(2,1fr)}
+  .settings{padding:24px 18px}
+  .mhero .lg,.mhero h2{left:18px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+.tip .row-btns,.banner .row-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.banner .notes{max-height:9em;overflow:auto;white-space:pre-wrap;font-size:.8rem;color:var(--muted);margin-top:6px}
+.perm .ver{font-size:.8rem;color:var(--muted)}
+.fhead{display:flex;align-items:flex-start;gap:12px}
+.fhead>div{flex:1}
+.fhead b{display:block;font-size:1rem;margin-bottom:3px}
+.fhead small{display:block;color:var(--muted);line-height:1.5;font-size:.84rem}
+.fhead .ico{font-size:1.1rem;width:18px;text-align:center}
+.fcount{flex:none;font-size:.78rem;font-weight:600;color:var(--muted);padding:5px 12px;border-radius:999px;border:1px solid var(--stroke);background:rgba(30,22,31,.45);white-space:nowrap}
+.rgroups{margin:14px 0 0;border:1px solid var(--stroke);border-radius:14px;background:rgba(30,22,31,.35);overflow:hidden}
+.rgroup+.rgroup{border-top:1px solid var(--stroke)}
+.rg-head{display:flex;align-items:center;gap:12px;padding:0 14px 0 16px;min-height:50px}
+.rg-head input{width:18px;height:18px;accent-color:var(--c2);flex:none;margin:0;cursor:pointer}
+.rg-tog{flex:1;display:flex;align-items:center;gap:10px;min-width:0;padding:14px 0;background:none;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.rg-tog b{font-size:.95rem;font-weight:700;white-space:nowrap}
+.rg-tog .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.rg-tog .plus{width:9px;flex:none;color:var(--muted);font-weight:700;text-align:center}
+.rg-tog .drives{margin-left:auto;font-family:ui-monospace,Consolas,monospace;font-size:.8rem;letter-spacing:.35em;color:var(--muted);white-space:nowrap}
+.rg-tog .rg-n{width:44px;text-align:right;font-size:.82rem;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.rg-tog .chev{display:inline-flex;width:16px;color:var(--muted);transition:transform .2s;flex:none}
+.rg-tog .chev svg{width:14px;height:14px}
+.rgroup.open .rg-tog .chev{transform:rotate(90deg)}
+.rg-tog:focus-visible{outline:2px solid var(--c2);outline-offset:2px;border-radius:6px}
+.rgroup.off .rg-tog b{color:var(--muted)}
+.rg-items{display:none;padding:0 16px 12px 46px}
+.rgroup.open .rg-items{display:block}
+.rline{display:flex;align-items:center;gap:12px;padding:6px 0;cursor:pointer;font-family:ui-monospace,Consolas,monospace;font-size:.84rem;min-width:0}
+.rline input{width:17px;height:17px;accent-color:var(--c2);flex:none;margin:0}
+.rline span{overflow-wrap:anywhere}
+.rline .drv{font-weight:700;color:var(--text)}
+.rline:has(input:not(:checked)) span{color:var(--dim)}
+.rg-items .note{display:block;color:var(--muted);font-size:.8rem;line-height:1.5;margin-top:6px}
+.rg-items .addrow{margin:6px 0 0}
+.rg-head #pickroot{flex:none}
+.muted2{color:var(--dim);font-size:.82rem;font-weight:400}
+.switch{display:flex;align-items:center;gap:12px;margin:16px 0 2px;cursor:pointer;font-size:.9rem}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch .knob{position:relative;flex:none;width:38px;height:22px;border-radius:999px;background:#5d4f66;transition:background .2s}
+.switch .knob::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s var(--ease)}
+.switch input:checked+.knob{background:var(--c2)}
+.switch input:checked+.knob::after{transform:translateX(16px)}
+.switch input:focus-visible+.knob{outline:2px solid var(--c2);outline-offset:2px}
+@media (max-width:640px){ .rg-tog .drives{display:none} .rg-items{padding-left:16px} }
+</style>
+</head>
+<body>
+<div class="ambient"><div class="bgart" id="bgart"></div></div>
+
+<header class="top" id="top">
+  <div class="brand"><img src="assets/icon-64.png" alt="" width="40" height="40"><span class="l">LAN</span><span class="h">HUB</span></div>
+  <label class="search glass"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="Search: cs, racing, lan 8p, couch…" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
+  <div class="squad glass" title="How many people are playing? Shows games that fit everyone.">
+    <label>Squad</label>
+    <button id="sqm" aria-label="Fewer players">−</button><div class="num" id="sq">1</div><button id="sqp" aria-label="More players">+</button>
+  </div>
+  <button class="btn btn-grad" id="pick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1.3" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1.3" fill="currentColor"/></svg><span class="lbl">Pick for us</span></button>
+  <div class="spacer"></div>
+  <div class="status glass" id="status"><span class="dot"></span><span class="lbl" id="statusTxt">Checking launcher…</span></div>
+  <button class="iconbtn glass" id="gear" title="Game folders & settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M12 11v5M9.5 13.5h5"/></svg></button>
+</header>
+
+<section class="hero" id="hero"></section>
+
+<main id="main">
+  <div id="banner"></div>
+  <div class="filters" id="filters"></div>
+  <div id="content"></div>
+</main>
+
+<footer><span id="built"></span><span><b>/</b> search · <b>Esc</b> close · <b>R</b> random pick · search tricks: <code>lan</code> <code>couch</code> <code>8p</code> <code>installed</code> <code>free</code></span></footer>
+
+<div class="overlay" id="overlay" aria-hidden="true"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+<div class="roul" id="roul"><div class="box glass"><div class="title" id="roulTitle">Rolling…</div><div class="slot" id="slot"></div><div class="name" id="roulName"></div><div class="sub" id="roulSub"></div><div class="row2"><button class="btn btn-glass" id="reroll">Roll again</button><button class="btn btn-primary" id="roulOpen">Let's play this</button><button class="btn btn-glass" id="roulClose">Close</button></div></div></div>
+<div class="toasts" id="toasts"></div>
+
+<!-- Served by LAN Hub: the game list is fetched by the page itself (data/games.json). Opened from disk: load the snapshot. -->
+<script nonce="__CSP_NONCE__">if (location.protocol === "file:") document.write('<script src="data/games.js"><\/script>');</script>
+<script nonce="__CSP_NONCE__">
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const store = { get(k, d) { try { const v = localStorage.getItem("lanhub." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+                set(k, v) { try { localStorage.setItem("lanhub." + k, JSON.stringify(v)); } catch {} } };
+const SERVED = location.protocol.startsWith("http");
+const idle = window.requestIdleCallback || (f => setTimeout(f, 30));
+
+const ICON = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>',
+  dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>',
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+  ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5M16 4.8a3.5 3.5 0 0 1 0 6.4M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  bulb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3Z"/></svg>',
+  l: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m15 5-7 7 7 7"/></svg>',
+  r: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 5 7 7-7 7"/></svg>',
+  steam: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0-9.96 9.2l5.36 2.2a2.8 2.8 0 0 1 1.6-.5h.16l2.39-3.45v-.05a3.8 3.8 0 1 1 3.8 3.8h-.09l-3.4 2.43v.13a2.85 2.85 0 0 1-5.65.5L2.4 14.9A10 10 0 1 0 12 2Zm-4.7 15.2-1.23-.5a2.14 2.14 0 1 0 1.17-2.92l1.27.52a1.57 1.57 0 1 1-1.2 2.9Zm9.53-7.75a2.53 2.53 0 1 0-2.53 2.53 2.53 2.53 0 0 0 2.53-2.53Zm-4.43 0a1.9 1.9 0 1 1 1.9 1.9 1.9 1.9 0 0 1-1.9-1.9Z"/></svg>',
+};
+
+/* ================================================= data + search index */
+let DATA, G = [], byId = {};
+const norm = s => String(s ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+/* common LAN-party abbreviations -> words in the title */
+const ALIAS = {bf: "battlefield", cs: "counter strike", ut: "unreal tournament", cod: "call of duty", l4d: "left 4 dead",
+  tf: "team fortress", tf2: "team fortress 2", gmod: "garry s mod", aoe: "age of empires", hl: "half life", hl2: "half life 2",
+  swbf: "star wars battlefront", et: "enemy territory", rtcw: "return to castle wolfenstein", mb: "mount blade",
+  ror: "risk of rain", ror2: "risk of rain 2", pz: "project zomboid", tabs: "totally accurate", bg: "baldur s gate",
+  iwd: "icewind dale", dst: "don t starve together", drg: "deep rock galactic", ktane: "keep talking", tm: "trackmania",
+  fo: "flatout", sof: "soldier of fortune", jsb: "just shapes", hfh: "human fall flat", ss: "serious sam"};
+const initials = t => norm(t).split(" ").map(w => /^\d+$/.test(w) ? w : w[0]).join("");
+function setData(d) {
+  DATA = d || {games: []}; G = DATA.games || [];
+  byId = {};
+  for (const g of G) {
+    byId[g.id] = g;
+    g._t = norm(g.title);                      // "counter strike 1 6"
+    g._tc = g._t.replace(/ /g, "");            // "counterstrike16"
+    g._ini = initials(g.title);                // "cs16"
+    g._alias = Object.keys(ALIAS).filter(k => (" " + g._t + " ").includes(" " + ALIAS[k] + " ") || (" " + g._t).includes(" " + ALIAS[k]));
+    g._h = norm([g.title, g.genre, GENRE[g.genre], g.desc, g.note, g.dev, ...(g.tags||[]), ...(g.features||[])].join(" "));
+    g._card = null;                            // card html cache
+  }
+}
+const GENRE = { shooter:"shooter", party:"party", coop:"co-op", racing:"racing", strategy:"strategy", survival:"survival", fighting:"fighting", rpg:"RPG", horror:"horror", sports:"sports", social:"social deduction", sandbox:"sandbox", other:"other" };
+
+/* query -> {words, filters}.  Special words act as filters: lan, couch/local/split, installed, free, Np (fits N players) */
+function parseQuery(q) {
+  const out = {words: [], f: []};
+  for (const w of norm(q).split(" ").filter(Boolean)) {
+    let m;
+    if (w === "lan") out.f.push(g => g.lan);
+    else if (w === "couch" || w === "local" || w === "split" || w === "splitscreen") out.f.push(g => g.couch >= 2);
+    else if (w === "installed" || w === "ready") out.f.push(g => g.installed);
+    else if (w === "free") out.f.push(g => g.free || g.status === "store");
+    else if ((m = w.match(/^(\d{1,2})p$/))) { const n = +m[1]; out.f.push(g => fits(g, n)); }
+    else out.words.push(w);
+  }
+  return out;
+}
+function score(g, words) {
+  if (!words.length) return 1;
+  let s = 0;
+  const full = words.join(" "), compact = full.replace(/ /g, "");
+  if (g._t === full) s += 1000;
+  else if (g._alias.includes(compact)) s += 600;                                  // "bf", "l4d", "gmod"
+  else if (compact.length >= 2 && g._ini.startsWith(compact)) s += 500;         // "cs" -> Counter-Strike, "ut2004", "bf"
+  else if (g._t.startsWith(full)) s += 400;
+  else if (compact.length >= 4 && g._tc.includes(compact)) s += 150;             // "counterstrike", "trackmania"
+  for (const w of words) {
+    let hit = 0;
+    const short = w.length <= 2;                                                  // short words: title only, no substring noise
+    if (w.length >= 2 && g._ini.startsWith(w)) hit = 90;
+    if (g._alias.includes(w)) hit = 95;
+    if ((" " + g._t).includes(" " + w)) hit = Math.max(hit, 60);               // word prefix in title
+    else if (!short && g._t.includes(w)) hit = Math.max(hit, 30);
+    else if (!short && g._tc.includes(w)) hit = Math.max(hit, 25);
+    else if (!short && g._h.includes(" " + w)) hit = Math.max(hit, 8);          // word prefix in description/tags
+    else if (w.length >= 4 && g._h.includes(w)) hit = Math.max(hit, 4);
+    if (!hit) return 0;                                                // every word must match somewhere
+    s += hit;
+  }
+  return s + (g.installed ? 4 : 0) + (g.lan ? 2 : 0);
+}
+
+/* ================================================= state */
+const S = { squad: store.get("squad", 1), filter: store.get("filter", "all"), view: store.get("view", "rows"), q: "",
+            server: false, ips: [], built: null, scanning: false, banner: store.get("banner", true) };
+const FILTERS = [
+  ["all", "Everything", () => true],
+  ["ready", "Ready to play", g => g.installed],
+  ["lan", "LAN / offline", g => g.lan],
+  ["couch", "Couch (1 PC)", g => g.couch >= 2],
+  ["installers", "Installers & archives", g => g.source === "local" && !g.installed],
+  ["notinst", "Not installed (Steam)", g => g.source === "steam" && !g.installed],
+];
+const fits = (g, n) => n <= 1 || g.guess || (g.pmax >= n && g.pmin <= n) || g.couch >= n;
+const statusLabel = g => g.source === "steam" ? (g.installed ? "Installed" : "Not installed") :
+  ({installed:"Installed", installer:"Installer ready", folder:"Folder", store:"Free on Steam"})[g.status] || "";
+const sortPlay = (a, b) => (b.installed - a.installed) || (b.lan - a.lan) || ((b.lanCollection|0) - (a.lanCollection|0)) || (a.guess|0) - (b.guess|0) || a.title.localeCompare(b.title);
+function baseList() {
+  const f = (FILTERS.find(f => f[0] === S.filter) || FILTERS[0])[2];
+  return G.filter(g => f(g) && fits(g, S.squad));
+}
+
+/* ================================================= cards (cached html) */
+const hash = s => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return Math.abs(h); };
+const phStyle = g => { const h = hash(g.title) % 360; return `background:linear-gradient(135deg,hsl(${h} 70% 30%),hsl(${(h+60)%360} 75% 18%));`; };
+function cardHTML(g) {
+  if (g._card) return g._card;
+  const flags = [];
+  if (g.lan) flags.push('<span class="flag lan">LAN</span>');
+  if (g.couch >= 2) flags.push(`<span class="flag couch">${g.couch}P COUCH</span>`);
+  if (!g.installed) flags.push(`<span class="flag get">${g.status === "installer" ? "SETUP" : "GET"}</span>`);
+  if (g.platform === "xbox") flags.push('<span class="flag couch">XBOX</span>');
+  const img = g.img && g.img.cover;
+  return (g._card = `<div class="card${g.installed ? "" : " notinst"}${img ? "" : " noart"}" tabindex="0" data-id="${esc(g.id)}"><div class="frame">${
+    img ? `<img class="cover" loading="lazy" decoding="async" width="460" height="215" src="${esc(img)}" alt="">` : `<div class="ph" style="${phStyle(g)}">${esc(g.title)}</div>`
+  }<div class="shade"></div><div class="badges"><span class="pl">${ICON.users}${esc(g.players)}</span><span class="flags">${flags.join("")}</span></div><div class="info"><b>${esc(g.title)}</b><span>${esc(GENRE[g.genre] || g.genre)} · ${esc(statusLabel(g))}</span></div>${g.installed ? '<span class="idot"></span>' : ""}</div></div>`);
+}
+
+/* rows render a first batch; more cards are appended as you scroll the row.
+   The batch and the arrows follow the window width (from the CSS card size, without laying out off-screen rows):
+   a fixed count left the right edge of an ultrawide screen empty until a hover filled it in, and showed a ›
+   on rows that already fit. */
+const BATCH = 18, rowLists = new Map();
+function rowMetrics() {
+  const cs = getComputedStyle(document.documentElement);
+  const w = parseFloat(cs.getPropertyValue("--card-w")) || 300, gut = parseFloat(cs.getPropertyValue("--gutter")) || 28, gap = 14;
+  const slots = (document.documentElement.clientWidth - 2 * gut + gap) / (w + gap);
+  return {fit: Math.max(1, Math.floor(slots)), first: Math.ceil(slots) + 3};   // whole cards that fit · cards to render up front
+}
+let RM = rowMetrics();
+function rowHTML(key, emoji, title, sub, list) {
+  if (!list.length) return "";
+  rowLists.set(key, list);
+  const first = Math.min(RM.first, list.length);
+  return `<section class="row" data-row="${key}" data-n="${first}">
+    <h2><span>${emoji}</span>${esc(title)}<small>${list.length}</small>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}</h2>
+    <button class="arrow l" aria-label="Scroll left" hidden>${ICON.l}</button>
+    <div class="track">${list.slice(0, first).map(cardHTML).join("")}</div>
+    <button class="arrow r" aria-label="Scroll right"${list.length <= RM.fit ? " hidden" : ""}>${ICON.r}</button></section>`;
+}
+function growRow(row, count = BATCH) {
+  const list = rowLists.get(row.dataset.row); if (!list) return;
+  const n = +row.dataset.n; if (n >= list.length) return;
+  row.querySelector(".track").insertAdjacentHTML("beforeend", list.slice(n, n + count).map(cardHTML).join(""));
+  row.dataset.n = Math.min(list.length, n + count);
+}
+function setupRow(row) {
+  const t = row.querySelector(".track"), l = row.querySelector(".arrow.l"), r = row.querySelector(".arrow.r");
+  let ticking = false;
+  const upd = row._upd = () => {
+    ticking = false;
+    const end = t.scrollLeft + t.clientWidth;
+    if (end > t.scrollWidth - t.clientWidth * 1.2) growRow(row);
+    l.hidden = t.scrollLeft < 10; r.hidden = end >= t.scrollWidth - 10 && +row.dataset.n >= rowLists.get(row.dataset.row).length;
+  };
+  l.onclick = () => t.scrollBy({left: -t.clientWidth * .85});
+  r.onclick = () => { growRow(row); t.scrollBy({left: t.clientWidth * .85}); };
+  t.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(upd); } }, {passive: true});
+  row.addEventListener("pointerenter", () => growRow(row, 6), {once: true, passive: true});
+  /* Tab walks the cards: load the next ones before focus reaches the last rendered card, or it would skip to the next row */
+  t.addEventListener("focusin", e => { const c = e.target.closest(".card"); if (c && !c.nextElementSibling?.nextElementSibling?.nextElementSibling) growRow(row); });
+}
+/* window resized (or moved to another screen): fill the new width and re-check the arrows */
+let rowRT;
+addEventListener("resize", () => { clearTimeout(rowRT); rowRT = setTimeout(() => {
+  const m = rowMetrics(); if (m.fit === RM.fit && m.first === RM.first) return;
+  RM = m;
+  document.querySelectorAll("#content .row").forEach(row => {
+    const n = +row.dataset.n; if (n < RM.first) growRow(row, RM.first - n);
+    if (row._upd) row._upd();
+  });
+}, 150); });
+
+/* grid / results render in chunks via an IntersectionObserver sentinel */
+let gridList = [], gridN = 0, gridIO = null;
+function gridHTML(list) {
+  gridList = list; gridN = Math.min(list.length, 48);
+  return `<div class="grid" id="grid">${list.slice(0, gridN).map(cardHTML).join("")}</div><div class="sentinel" id="sentinel"></div>`;
+}
+function setupGrid() {
+  if (gridIO) gridIO.disconnect();
+  const s = $("#sentinel"); if (!s) return;
+  gridIO = new IntersectionObserver(es => {
+    if (!es[0].isIntersecting || gridN >= gridList.length) return;
+    $("#grid").insertAdjacentHTML("beforeend", gridList.slice(gridN, gridN + 48).map(cardHTML).join(""));
+    gridN = Math.min(gridList.length, gridN + 48);
+    /* the observer only fires when the sentinel crosses the margin: on a tall/wide screen 48 more cards may not
+       push it out, and the grid would stop loading for good. Re-observing reports the current state again. */
+    if (gridN < gridList.length) { gridIO.unobserve(s); gridIO.observe(s); }
+  }, {rootMargin: "800px"});
+  gridIO.observe(s);
+}
+
+/* ================================================= render */
+function render() {
+  rowLists.clear();
+  const V = baseList();
+  let html = "";
+  if (S.q) {
+    const {words, f} = parseQuery(S.q);
+    const res = (!words.length && !f.length) ? [] : V.filter(g => f.every(fn => fn(g))).map(g => [score(g, words), g]).filter(x => x[0] > 0)
+                 .sort((a, b) => b[0] - a[0] || sortPlay(a[1], b[1])).map(x => x[1]);
+    html = `<div class="results-head"><h2>Results for “${esc(S.q)}”</h2><small>${res.length} game${res.length === 1 ? "" : "s"}${S.squad > 1 ? ` · fitting ${S.squad} players` : ""}${S.filter !== "all" ? " · filter: " + FILTERS.find(x => x[0] === S.filter)[1] : ""}</small></div>` +
+           (res.length ? gridHTML(res) : `<div class="empty pane">Nothing found. Try fewer words, or <b>Esc</b> to clear.</div>`);
+  } else if (S.view === "grid") {
+    html = V.length ? gridHTML(V.slice().sort(sortPlay)) : "";
+  } else {
+    const n = S.squad, inG = (...gs) => g => gs.includes(g.genre);
+    html = [
+      rowHTML("lanc", "⭐", `Your Steam “${DATA.lanCollection || "LAN"}” collection`, "the usual suspects", V.filter(g => g.lanCollection).sort(sortPlay)),
+      rowHTML("vault", "💾", "The LAN Vault", "classics, installers & archives in your LAN folder", V.filter(g => g.vault && !g.unknown).sort((a,b) => (b.installed-a.installed) || a.title.localeCompare(b.title))),
+      n > 1 ? rowHTML("squad", "👥", `Fits all ${n} of you · LAN-ready & installed`, "", V.filter(g => g.lan && g.installed && !g.guess).sort((a,b) => a.pmax - b.pmax)) : "",
+      rowHTML("couch", "🛋️", "One PC, many controllers", "split-screen, shared screen & phone games", V.filter(g => g.couch >= 2 && g.installed).sort(sortPlay)),
+      rowHTML("shoot", "🔫", "Frag fests & shooters", "", V.filter(inG("shooter")).sort(sortPlay)),
+      rowHTML("party", "🎉", "Party, brawlers & mayhem", "", V.filter(inG("party","fighting")).sort(sortPlay)),
+      rowHTML("coop", "🤝", "Co-op adventures & dungeon crawls", "", V.filter(inG("coop","rpg")).sort(sortPlay)),
+      rowHTML("surv", "⛏️", "Survival, crafting & sandbox", "", V.filter(inG("survival","sandbox")).sort(sortPlay)),
+      rowHTML("race", "🏁", "Racing & sports", "", V.filter(inG("racing","sports")).sort(sortPlay)),
+      rowHTML("strat", "♟️", "Strategy, RTS & board games", "", V.filter(inG("strategy")).sort(sortPlay)),
+      rowHTML("social", "🕵️", "Social deduction & horror nights", "", V.filter(inG("social","horror")).sort(sortPlay)),
+      rowHTML("drives", "🗂️", "Found on your other drives", "curated games outside the LAN folder", V.filter(g => g.source === "local" && !g.vault && !g.unknown).sort(sortPlay)),
+      rowHTML("unknown", "❔", "Other games found", "auto-detected folders, no player info yet", V.filter(g => g.unknown).sort((a,b) => a.title.localeCompare(b.title))),
+      rowHTML("get", "📥", "In your Steam library · not installed", "LAN-capable first", V.filter(g => g.source === "steam" && !g.installed).sort((a,b) => (b.lan-a.lan) || (b.pmax-a.pmax))),
+    ].join("");
+  }
+  const c = $("#content");
+  c.innerHTML = html || `<div class="empty pane">No games match. Try a smaller squad or another filter.</div>`;
+  c.querySelectorAll(".row").forEach(setupRow);
+  setupGrid();
+  renderFilters();
+}
+let renderQueued = false;
+const scheduleRender = () => { if (!renderQueued) { renderQueued = true; requestAnimationFrame(() => { renderQueued = false; render(); }); } };
+
+function renderFilters() {
+  const base = G.filter(g => fits(g, S.squad));
+  $("#filters").innerHTML = FILTERS.map(([k, label, f]) =>
+    `<button class="fchip${S.filter === k ? " on" : ""}" data-f="${k}">${label}<span class="n">${base.filter(f).length}</span></button>`).join("") +
+    `<div class="viewtoggle pane"><button data-v="rows" class="${S.view==="rows"?"on":""}">Rows</button><button data-v="grid" class="${S.view==="grid"?"on":""}">Grid</button></div>`;
+}
+function emptyText() {
+  if (!SERVED) return "No game data yet.<br>Double-click <b>LAN Hub.exe</b> to scan this PC.";
+  if (!S.server) return "Connecting to the launcher…";
+  if (S.consented === false) return "🔎 <b>Nothing scanned yet.</b><br>Answer the permission screen and the page fills in by itself.";
+  if (S.scanning) return "🔎 <b>Scanning your PC…</b><br>Steam libraries and the folders you allowed. This page fills in by itself.";
+  return "No games found in what you allowed.<br>Add folders with the folder button (top right).";
+}
+function renderBanner() {
+  let h = "";
+  if (!SERVED && S.banner) h = `<div class="banner glass">🔌<div>You opened the page directly, so you can browse but not launch.<br>To <b>launch games and scan your own PC</b>, double-click <b>LAN Hub.exe</b> (one folder up).</div><button class="btn btn-glass btn-sm x" data-banner>Got it</button></div>`;
+  if (S.server && S.error && !S.scanning) h = `<div class="banner glass">⚠️<div><b>The last scan failed:</b> ${esc(S.error)}<br>Check <code>app\\config.json</code> or open the log from the tray icon, then rescan from the folder button.</div></div>`;
+  const u = S.update;
+  if (S.restarting) h += `<div class="banner glass">🔄<div><b>Installing the update…</b> LAN Hub restarts and this page reconnects by itself.</div></div>`;
+  else if (S.server && u && (u.available || u.busy || u.staged) && store.get("skipUpdate", "") !== u.latest) h += `<div class="banner glass">✨<div>
+    <b>LAN Hub ${esc(u.latest)} is available</b> (you have ${esc(u.current)}).${u.error ? `<br><span style="color:var(--bad)">${esc(u.error)}</span>` : ""}
+    ${u.notes ? `<details><summary>What's new</summary><div class="notes">${esc(u.notes)}</div></details>` : ""}
+    <div class="row-btns">${u.busy ? `<button class="btn btn-grad btn-sm" disabled>Downloading… ${u.progress != null ? esc(u.progress) + "%" : ""}</button>`
+      : u.staged ? `<span class="muted">Downloaded and verified. Quit LAN Hub from the tray and start it again to finish.</span>`
+      : `<button class="btn btn-grad btn-sm" id="updnow">Update now</button><button class="btn btn-glass btn-sm" id="updskip">Skip this version</button>`}
+      ${u.page ? `<a class="btn btn-glass btn-sm" href="${esc(u.page)}" target="_blank" rel="noopener">${ICON.ext}Release page</a>` : ""}</div></div></div>`;
+  if (S.lastBanner !== h) { S.lastBanner = h; $("#banner").innerHTML = h; }   // don't close "What's new" on every poll
+  if (!G.length) $("#content").innerHTML = `<div class="empty pane">${emptyText()}</div>`;
+}
+
+/* ================================================= hero */
+let heroList = [], heroIdx = 0, heroTimer;
+function pickHero() {
+  const ok = g => g.img && g.img.hero;
+  const pool = G.filter(g => g.installed && ok(g) && (g.lanCollection || g.lan) && fits(g, S.squad));
+  const src = pool.length >= 3 ? pool : G.filter(ok);
+  heroList = src.sort(() => Math.random() - .5).slice(0, 6);
+  heroIdx = 0; showHero();
+}
+function showHero() {
+  clearTimeout(heroTimer);
+  const el = $("#hero"), g = heroList[heroIdx];
+  if (!g) { el.className = "hero slim"; el.innerHTML = ""; return; }
+  el.className = "hero";
+  const art = g.img.hero || g.img.cover;
+  const img = new Image(); img.decoding = "async"; img.src = art;   // decode before swapping: no jank
+  (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
+    const prev = el.querySelectorAll(".art");
+    const a = document.createElement("div"); a.className = "art"; a.style.backgroundImage = `url("${art}")`; a.style.opacity = 0;
+    el.prepend(a);
+    requestAnimationFrame(() => requestAnimationFrame(() => { a.style.opacity = 1; a.classList.add("show"); prev.forEach(p => { p.style.opacity = 0; setTimeout(() => p.remove(), 800); }); }));
+    el.querySelectorAll(".inner,.pager").forEach(n => n.remove());
+    el.insertAdjacentHTML("beforeend", `<div class="inner glass hero-fade-in">
+      <div class="kicker"><span class="bar"></span>${g.lanCollection ? "From your LAN collection" : "Tonight's pick"}</div>
+      ${g.img.logo ? `<img class="logo" src="${esc(g.img.logo)}" alt="${esc(g.title)}">` : `<h1>${esc(g.title)}</h1>`}
+      <div class="meta">${badges(g).join("")}</div>
+      <p>${esc(g.desc || g.note || "")}</p>
+      <div class="actions">${primaryBtn(g)}<button class="btn btn-glass" data-open="${esc(g.id)}">${ICON.info}More info</button></div>
+      <div class="pager">${heroList.map((_, i) => `<button class="${i===heroIdx?"on":""}" data-h="${i}" aria-label="Slide ${i+1}"></button>`).join("")}</div>
+    </div>`);
+    if (!openId) setBg(art);
+    heroTimer = setTimeout(() => { if (document.hidden || openId) { heroTimer = setTimeout(showHero, 3000); return; } heroIdx = (heroIdx + 1) % heroList.length; showHero(); }, 9000);
+  });
+}
+function setBg(url) { const b = $("#bgart"); if (b.dataset.u === url) return; b.dataset.u = url; b.style.backgroundImage = `url("${url}")`; b.classList.add("on"); }
+
+/* ================================================= badges & buttons */
+function badges(g) {
+  const b = [`<span class="chip">${ICON.users.replace("<svg", '<svg width="13" height="13"')} ${esc(g.players)} players</span>`];
+  b.push(g.lan ? '<span class="chip lan"><span class="dot"></span>LAN / host-by-IP</span>' : g.unknown ? "" : '<span class="chip online"><span class="dot"></span>Online</span>');
+  if (g.couch >= 2) b.push(`<span class="chip couch">🎮 ${g.couch}${g.guess ? "+" : ""} on one PC</span>`);
+  b.push(`<span class="chip ${g.installed ? "" : "notinst"}">${g.installed ? "✓ " : ""}${esc(statusLabel(g))}${g.sizeGB ? ` · ${g.sizeGB} GB` : ""}</span>`);
+  if (g.platform === "xbox") b.push('<span class="chip">Xbox app / Game Pass</span>');
+  if (g.located) b.push(`<span class="chip">${esc(LOCATED[g.located] || "Located")}</span>`);
+  if ((S.installing || []).includes(g.id)) b.push('<span class="chip couch">⏳ Installing…</span>');
+  if (g.lanCollection) b.push('<span class="chip star">★ LAN collection</span>');
+  return b.filter(Boolean);
+}
+const isArchive = p => /\.(rar|zip|7z|iso)$/i.test(p || "");
+const LOCATED = {installer: "Found after its install", windows: "Found in Windows' installed apps", manual: "Picked by you"};
+function primaryBtn(g, cls = "btn-primary") {
+  const id = esc(g.id);
+  if (g.source === "steam") return g.installed
+    ? `<button class="btn ${cls}" data-act="steam" data-url="steam://rungameid/${esc(g.appid)}" data-id="${id}">${ICON.play}Play</button>`
+    : `<button class="btn ${cls}" data-act="steam" data-url="steam://install/${esc(g.appid)}" data-id="${id}">${ICON.dl}Install</button>`;
+  if (g.launchPath) return `<button class="btn ${cls}" data-act="launch" data-id="${id}">${ICON.play}Play</button>`;
+  if (g.url) return `<button class="btn ${cls}" data-act="steam" data-url="${esc(g.url)}" data-id="${id}">${ICON.dl}Install free</button>`;
+  if (g.installPath) return `<button class="btn ${cls}" data-act="install" data-id="${id}">${ICON.dl}${isArchive(g.installPath) ? "Open archive" : "Install"}</button>`;
+  return `<button class="btn ${cls}" data-act="folder" data-id="${id}">${ICON.folder}Open folder</button>`;
+}
+function installHelp(g) {
+  /* an installer tile: explain what happens, and offer the two ways to turn it into "Play" */
+  if (g.source !== "local" || g.installed || !g.installPath || isArchive(g.installPath) || !SERVED) return "";
+  const busy = (S.installing || []).includes(g.id), id = esc(g.id);
+  return `<div class="tip">${ICON.bulb}<div>${busy
+    ? "<b>Installing…</b> When the installer closes, LAN Hub looks for the game by itself and this button turns into <b>Play</b>."
+    : "<b>Install</b> runs the installer. When it closes, LAN Hub finds the installed game by itself" + ((S.allow || {}).installed === false ?" if you allow it to read Windows' list of installed apps (folder button, top right)" : "") + "."}
+    <div class="row-btns"><button class="btn btn-glass btn-sm" data-done="${id}">${busy ? "I'm done installing" : "Already installed? Rescan"}</button><button class="btn btn-glass btn-sm" data-locate="${id}">${ICON.folder}Locate the game's .exe…</button></div></div></div>`;
+}
+function actionButtons(g) {
+  const id = esc(g.id), b = [primaryBtn(g)];
+  if (g.source === "local" && g.launchPath && g.installPath) b.push(`<button class="btn btn-glass" data-act="install" data-id="${id}">${ICON.dl}${isArchive(g.installPath) ? "Open archive" : "Run installer"}</button>`);
+  if (g.located && g.located !== "windows" && SERVED) b.push(`<button class="btn btn-glass" data-forget="${id}" title="Stop using ${esc(g.launchPath || "")}">${ICON.x}Forget location</button>`);
+  if ((g.source === "steam" && g.installed) || (g.source === "local" && (g.folderPath || g.launchPath || g.installPath)))
+    b.push(`<button class="btn btn-glass" data-act="folder" data-id="${id}">${ICON.folder}Open folder</button>`);
+  if (g.appid) {
+    b.push(`<button class="btn btn-glass" data-act="steam" data-url="steam://nav/games/details/${esc(g.appid)}" data-id="${id}">${ICON.steam}In Steam</button>`);
+    b.push(`<a class="btn btn-glass" href="https://store.steampowered.com/app/${esc(g.appid)}" target="_blank" rel="noopener">${ICON.ext}Store page</a>`);
+  }
+  const p = g.path || g.installPath || g.folderPath;
+  if (p) b.push(`<button class="btn btn-glass" data-copy="${esc(p)}">${ICON.copy}Copy path</button>`);
+  return b.join("");
+}
+
+/* ================================================= detail modal (shared-element transition) */
+let openId = null, modalKind = null;
+
+function modalHTML(g) {
+  const hero = g.img.hero || g.img.cover;
+  const fit = S.squad > 1 ? (fits(g, S.squad) ? `<span class="fit yes">✓ fits your squad of ${S.squad}</span>` : `<span class="fit no">✗ not for ${S.squad}</span>`) : "";
+  const gname = GENRE[g.genre] || g.genre;
+  const meta = [
+    ["Genre", [gname, ...(g.tags || []).filter(t => t.toLowerCase() !== gname.toLowerCase()).slice(0, 3)].join(" · ")],
+    ["Developer", g.dev], ["Released", g.release], ["Metacritic", g.meta], ["Steam reviews", g.review ? g.review + "% positive" : null],
+    ["Source", g.source === "steam" ? `Steam (app ${esc(g.appid)})` : g.unknown ? "Found automatically" : "Local files"],
+    ["Status", statusLabel(g) + (g.sizeGB ? ` · ${g.sizeGB} GB` : "")],
+  ].filter(m => m[1] != null && m[1] !== "");
+  const p = g.path || g.installPath || g.folderPath;
+  const similar = G.filter(x => x.id !== g.id && x.genre === g.genre && fits(x, S.squad) && !x.unknown).sort(sortPlay).slice(0, 8);
+  return `<button class="close" data-close aria-label="Close">${ICON.x}</button>
+  <div class="mhero${g.img.hero ? "" : " boxart"}">
+    ${hero && !g.img.hero ? `<img class="blur" src="${esc(hero)}" alt="">` : ""}
+    ${hero ? `<img class="bg" id="mart" src="${esc(hero)}" alt="" decoding="async">` : `<div class="bg" id="mart" style="${phStyle(g)}"></div>`}
+    ${g.img.logo ? `<img class="lg" src="${esc(g.img.logo)}" alt="${esc(g.title)}">` : `<h2>${esc(g.title)}</h2>`}
+  </div>
+  <div class="mbody">
+    <div class="stagger">
+      <div class="mchips">${badges(g).join("")}</div>
+      <div class="bigplayers pane"><div class="n">${esc(g.players)}</div><div class="l">${g.players === "?" ? "player count unknown<br>not curated yet" : "players"}${g.couch >= 2 ? `<br>up to ${g.couch}${g.guess ? "+" : ""} on a single PC` : ""}${g.unknown ? "" : g.lan ? "<br>playable over LAN / direct IP" : "<br>needs internet / Steam"}</div>${fit}</div>
+      ${g.desc ? `<p class="desc">${esc(g.desc)}</p>` : ""}
+      ${g.note ? `<div class="tip">${ICON.bulb}<div><b>LAN tip</b> · ${esc(g.note)}</div></div>` : ""}
+      <div class="mactions">${actionButtons(g)}</div>
+      ${installHelp(g)}
+    </div>
+    <aside class="side stagger">
+      <dl>${meta.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}
+      ${p ? `<dt>Path</dt><dd class="path" data-copy="${esc(p)}" title="Click to copy">${esc(p)}</dd>` : ""}</dl>
+      ${g.features && g.features.length ? `<h4>Features</h4><div class="feats">${g.features.slice(0, 14).map(f => `<span class="chip">${esc(f)}</span>`).join("")}</div>` : ""}
+    </aside>
+  </div>
+  ${similar.length ? `<div class="more"><h3>More like this</h3><div class="grid">${similar.map(cardHTML).join("")}</div></div>` : ""}`;
+}
+function findCardArt(id) {
+  /* only a card that's FULLY visible can morph: one half under the sticky header or cut off by its row's
+     scroll edge would fly in from behind the header / out of nowhere */
+  const topH = $("#top").getBoundingClientRect().bottom;
+  for (const c of document.querySelectorAll(`#content .card[data-id="${CSS.escape(id)}"]`)) {
+    const r = c.getBoundingClientRect(), t = c.closest(".track"), tr = t ? t.getBoundingClientRect() : {left: 0, right: innerWidth};
+    if (r.top >= topH - 2 && r.bottom <= innerHeight + 2 && r.left >= Math.max(0, tr.left) - 2 && r.right <= Math.min(innerWidth, tr.right) + 2)
+      return c.querySelector("img.cover,.ph");
+  }
+  return null;
+}
+/* the detail view shows the big hero image, which for games further down the page isn't loaded yet:
+   morphing into an empty box looks broken, so wait for it briefly (or skip the morph) */
+function imageReady(src, ms) {
+  return new Promise(res => {
+    const im = new Image(); im.decoding = "async"; im.src = src;
+    if (im.complete && im.naturalWidth) return res(true);
+    const t = setTimeout(() => res(false), ms);
+    (im.decode ? im.decode() : Promise.reject()).then(() => { clearTimeout(t); res(true); }, () => { clearTimeout(t); res(false); });
+  });
+}
+let openSeq = 0;
+let lastFocus = null;
+function restoreFocus() {
+  if (lastFocus && document.contains(lastFocus)) lastFocus.focus({preventScroll: true});
+  lastFocus = null;
+}
+function focusModal() {
+  const m = $("#modal");
+  const el = [".mactions .btn", "#permsave", ".settings input", ".close"].map(s => m.querySelector(s)).find(Boolean);
+  if (el) el.focus({preventScroll: true});
+}
+function trapTab(e, root) {
+  const els = [...root.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), [tabindex="0"]')].filter(x => x.offsetParent !== null);
+  if (!els.length) return;
+  const first = els[0], last = els[els.length - 1];
+  if (!root.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+}
+function showOverlay(html, kind) {
+  if (!modalKind) lastFocus = S.focusReturn || (document.activeElement !== document.body ? document.activeElement : null);
+  S.focusReturn = null;
+  $("#modal").innerHTML = html;
+  $("#overlay").scrollTop = 0;
+  $("#overlay").classList.add("open"); $("#overlay").setAttribute("aria-hidden", "false");
+  document.documentElement.style.overflow = "hidden";
+  modalKind = kind;
+  requestAnimationFrame(focusModal);
+}
+function openModal(id) {
+  const g = byId[id]; if (!g) return;
+  const from = !openId && findCardArt(id);
+  const doOpen = () => {
+    showOverlay(modalHTML(g), "game");
+    openId = id;
+    history.replaceState(null, "", "#g/" + encodeURIComponent(id));
+    const art = g.img.hero || g.img.cover; if (art) setBg(art);
+  };
+  const art = g.img.hero || g.img.cover;
+  if (canFly && from && from.tagName === "IMG" && from.complete && art) {
+    const seq = ++openSeq;
+    imageReady(art, 300).then(() => {
+      if (seq !== openSeq || openId || !document.contains(from)) return;   // clicked something else meanwhile
+      const a = from.getBoundingClientRect();            // the card's art, in screen coordinates
+      $("#overlay").classList.add("fly");                // panel appears in its final place (no slide)
+      doOpen();
+      const m = $("#mart"); if (!m) return $("#overlay").classList.remove("fly");
+      flyArt(a, m.getBoundingClientRect(), from.currentSrc || from.src, art, () => $("#overlay").classList.remove("fly"));
+    });
+  } else {
+    if (openId) $("#modal").animate([{opacity: .4, transform: "scale(.985)"}, {opacity: 1, transform: "none"}], {duration: 260, easing: "ease-out"});
+    doOpen();
+  }
+}
+function refreshModal() {
+  /* same game, new state (installing / located): redraw without the open animation, keep the scroll position */
+  const g = byId[openId], ov = $("#overlay"); if (!g) return;
+  const y = ov.scrollTop, had = document.activeElement && document.activeElement.closest("#modal");
+  $("#modal").innerHTML = modalHTML(g);
+  $("#modal").querySelectorAll(".stagger").forEach(s => s.classList.remove("stagger"));
+  ov.scrollTop = y; if (had) focusModal();
+}
+function closeModal() {
+  if (!modalKind) return;
+  const id = openId, m = $("#mart"), g = id && byId[id];
+  // fly back only if the art is in view in the panel and its card is fully visible on the page
+  const mr = m && m.tagName === "IMG" && m.getBoundingClientRect();
+  const fromRect = mr && mr.bottom > 40 ? mr : null;
+  $("#overlay").classList.remove("open"); $("#overlay").setAttribute("aria-hidden", "true");
+  document.documentElement.style.overflow = "";
+  openId = null; modalKind = null;
+  history.replaceState(null, "", location.pathname + location.search);
+  restoreFocus();
+  const to = canFly && fromRect && g && findCardArt(id);
+  if (to && to.tagName === "IMG") flyArt(fromRect, to.getBoundingClientRect(), m.currentSrc || m.src, to.currentSrc || to.src);
+}
+/* the artwork "flies" between the card and the detail panel: a fixed-position copy that moves in screen
+   coordinates, cross-fading from the card's image to the panel's, so page scrolling can't throw it off */
+const canFly = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+function flyArt(a, b, srcA, srcB, done) {
+  const box = document.createElement("div");
+  box.className = "flyart";
+  box.innerHTML = `<img alt="" src="${esc(srcA)}"><img alt="" class="to" src="${esc(srcB)}">`;
+  document.body.appendChild(box);
+  const rect = r => ({left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px"});
+  const opts = {duration: 460, easing: "cubic-bezier(.2,.8,.2,1)", fill: "forwards"};
+  const move = box.animate([{...rect(a), borderRadius: "14px"}, {...rect(b), borderRadius: "14px"}], opts);
+  box.querySelector(".to").animate([{opacity: 0}, {opacity: 0, offset: .25}, {opacity: 1}], opts);
+  move.finished.then(() => box.animate([{opacity: 1}, {opacity: 0}], {duration: 160, fill: "forwards"}).finished)
+    .catch(() => {}).finally(() => { box.remove(); if (done) done(); });
+}
+
+/* ================================================= permissions: consent screen + settings */
+let CFG = null, P = null;
+const permsFrom = (cfg, first) => {
+  const on = new Set(cfg.roots.map(r => r.toLowerCase()));
+  const rows = cfg.roots.map(r => ({path: r, on: true, tag: first ? "suggested" : ""}));
+  for (const c of cfg.candidates) if (!on.has(c.toLowerCase())) rows.push({path: c, on: first, tag: "suggested"});
+  const c = cfg.consent || {};
+  const steamOn = first ? !!cfg.steamPath : !!c.steam;
+  const steamLibs = (cfg.steamLibraries || []).map(l => ({path: l.path, on: steamOn && !l.off}));
+  const p = {steam: steamOn, internet: first ? true : !!c.internet, steamLibs,
+          installed: first ? !!cfg.windows : !!c.installed, updates: first ? true : !!c.updates, rows,
+          showUnknown: cfg.showUnknownGames !== false, collection: cfg.lanCollectionName || "LAN", open: new Set()};
+  // open the rows where only some folders are on, so the exceptions are visible
+  const mixed = list => list.some(x => x.on) && list.some(x => !x.on);
+  if (mixed(steamLibs)) p.open.add("steam");
+  for (const [k] of ROOT_KINDS) if (mixed(rows.filter(r => rootKind(r.path) === k))) p.open.add(k);
+  if (rows.some(r => rootKind(r.path) === "own")) p.open.add("own");
+  return p;
+};
+async function loadCfg() {
+  try { CFG = await (await fetch("/api/config", {cache: "no-store"})).json(); return true; }
+  catch { toast("Could not reach the launcher", "err"); return false; }
+}
+async function openConsent() {
+  if (!(await loadCfg())) return;
+  P = permsFrom(CFG, true); renderPerms("consent");
+}
+async function openSettings() {
+  openId = null;
+  if (!S.server) {
+    showOverlay(`<button class="close" data-close aria-label="Close">${ICON.x}</button><div class="settings">
+      <h2>Folders & permissions</h2><p class="lead">Start <b>LAN Hub.exe</b> first. These settings need the launcher running.</p></div>`, "settings");
+    return;
+  }
+  if (!(await loadCfg())) return;
+  if (!CFG.consented) return openConsent();
+  P = permsFrom(CFG, false); renderPerms("settings");
+}
+function renderPerms(mode) {
+  const first = mode === "consent";
+  const keepY = modalKind === mode ? $("#overlay").scrollTop : null;
+  const hosts = Object.entries(CFG.hosts || {});
+  const purposes = [...new Set(hosts.map(x => x[1]))];
+  const hostRows = purposes.map(why => `<li><b>${esc(why)}</b>: ${hosts.filter(x => x[1] === why).map(x => `<code>${esc(x[0])}</code>`).join(" ")}</li>`).join("");
+  showOverlay(`${first ? "" : `<button class="close" data-close aria-label="Close">${ICON.x}</button>`}<div class="settings perms">
+    <div class="permhead"><img src="assets/icon-64.png" alt="" width="56" height="56"><div>
+      <h2>${first ? "Before LAN Hub looks at anything" : "Folders & permissions"}</h2>
+      <p class="lead">${first && CFG.consent && CFG.consent.version ? "LAN Hub has new options since you last answered this. Have a look, then allow again."
+        : first ? "Choose what LAN Hub may read and download on this PC. Nothing has been scanned yet." : "Change what LAN Hub may read and download. Saving rescans right away."} You can change this later with the folder button (top right).</p></div></div>
+
+    <section class="perm pane">
+      <div class="fhead"><span class="ico">📁</span><div><b>Game libraries & folders</b>
+        <small>Only ticked ones are read: Steam's own library files, and the folders a few levels deep for game .exe files, installers and archives.</small></div>
+        <span class="fcount" id="fcount"></span></div>
+      <div class="rgroups">${rootGroupsHTML()}</div>
+      <label class="switch"><input type="checkbox" data-perm="showUnknown" ${P.showUnknown ? "checked" : ""}><span class="knob"></span><span><b>Also list game folders it doesn't recognise</b> <span class="muted2">shown under “Other games found”</span></span></label>
+    </section>
+
+    <section class="perm pane">
+      <label class="toggle big"><input type="checkbox" data-perm="internet" ${P.internet ? "checked" : ""}><span><b>Download game descriptions & artwork</b>
+        <small>Only from these sites, over HTTPS:</small></span></label>
+      <ul class="hosts">${hostRows}</ul>
+      <small class="fine">Requests contain game IDs, plus the names of game folders it couldn't recognise (to find their artwork). Nothing else about you or this PC is sent. Untick to stay fully offline.</small>
+    </section>
+
+    ${CFG.windows ? `<section class="perm pane">
+      <label class="toggle big"><input type="checkbox" data-perm="installed" ${P.installed ? "checked" : ""}><span><b>Find games I install with an installer</b>
+        <small>Reads Windows' list of installed apps (the one in Settings › Apps) to see where an installer put a game, so its tile turns from “Install” into “Play”. Only program names and their folders, and it never changes anything.</small></span></label>
+    </section>` : ""}
+
+    <section class="perm pane">
+      <label class="toggle big"><input type="checkbox" data-perm="updates" ${P.updates ? "checked" : ""}><span><b>Check for LAN Hub updates</b>
+        <small>Every few hours it asks GitHub whether <code>${esc(CFG.repo || "")}</code> has a newer release. Nothing installs until you click “Update”; the download must match the checksum GitHub publishes. Only these sites:</small></span></label>
+      <ul class="hosts"><li>${Object.keys(CFG.updateHosts || {}).map(h => `<code>${esc(h)}</code>`).join(" ")}</li></ul>
+      ${first ? "" : `<div class="addrow"><span class="ver">You have LAN Hub ${esc(CFG.version || "?")}${S.update && S.update.checked ? ` · last checked ${esc(S.update.checked)}` : ""}</span><button class="btn btn-glass btn-sm" id="updcheck" ${P.updates ? "" : "disabled"}>Check now</button></div>`}
+    </section>
+
+    <section class="perm always">
+      <b>Always, whatever you choose</b>
+      <ul>
+        <li>Only this PC can use it: the hub listens on <code>127.0.0.1</code>, not on your network.</li>
+        <li>It only starts games, installers and folders it found inside what you allowed above, or a game you pointed it to yourself. Steam games start through Steam, Xbox app games through Windows.</li>
+        <li>It only writes inside its own folder: game list, artwork and these settings (and new LAN Hub files, if you click Update).</li>
+        <li>Quit from the tray icon stops it completely. Games you started keep running.</li>
+        <li>The code is short and readable: <code>app\\tools\\*.py</code> and <code>app\\launcher\\LANHub.cs</code>.</li>
+      </ul>
+    </section>
+    ${first ? "" : `<div class="addrow"><span class="muted">Steam collection for the ⭐ row:</span><input type="text" id="optcol" value="${esc(P.collection)}" style="flex:0 1 200px"></div>`}
+    <div class="addrow actions">${first ? `<button class="btn btn-grad" id="permsave">Allow & scan</button><span class="muted">Untick anything you don't want first.</span>`
+      : `<button class="btn btn-grad" id="permsave">Save & rescan</button><button class="btn btn-glass" id="rescan">Rescan now</button>`}</div>
+  </div>`, mode);
+  syncGroups();
+  if (keepY != null) $("#overlay").scrollTop = keepY;   // re-render after "Add": stay where you were
+}
+/* libraries & folders grouped by where they come from: one row per store, one click to switch a whole store
+   off (e.g. an expired Game Pass), expand a row to pick single folders. Steam libraries are the first group. */
+const ROOT_KINDS = [
+  ["xbox", "#a884f3", "Xbox app / Game Pass", p => /\\(XboxGames|ModifiableWindowsApps)(\\|$)/i.test(p)],
+  ["gog", "#c7a6ff", "GOG", p => /\\GOG( Galaxy| Games)/i.test(p)],
+  ["epic", "#9a93a3", "Epic Games", p => /\\Epic Games(\\|$)/i.test(p)],
+  ["ea", "#f57d4a", "EA / Origin", p => /\\(EA Games|Origin Games)(\\|$)/i.test(p)],
+  ["ubi", "#4aa3f5", "Ubisoft", p => /\\Ubisoft/i.test(p)],
+  ["amazon", "#fbb954", "Amazon Games", p => /\\Amazon Games/i.test(p)],
+  ["lan", "#f04f78", "LAN folders", p => /\\LAN( Games)?$/i.test(p)],
+  ["games", "#fbd04a", "Games folders", p => /\\Games$/i.test(p)],
+  ["own", "", "Your own folders", () => true],
+];
+const rootKind = p => ROOT_KINDS.find(k => k[3](p))[0];
+const drivesOf = paths => [...new Set(paths.map(p => (String(p).match(/^([A-Za-z]):/) || [])[1]).filter(Boolean).map(d => d.toUpperCase()))].sort();
+const pathLine = p => { const m = String(p).match(/^([A-Za-z]:)(.*)$/);
+  return m ? `<span class="drv">${esc(m[1])}</span>${esc(m[2] || "\\")}` : esc(p); };
+function groupRow(key, color, label, items, attr, extra = "") {
+  /* items: [{path, on, idx, tag}] ; attr: "data-root" | "data-slib" */
+  const open = P.open && P.open.has(key);
+  const dot = color ? `<span class="dot" style="background:${color}"></span>` : `<span class="plus">+</span>`;
+  return `<div class="rgroup${open ? " open" : ""}" data-kind="${key}">
+    <div class="rg-head">
+      <input type="checkbox" data-rgroup="${key}" aria-label="All of ${esc(label)}" ${items.length ? "" : "disabled"}>
+      <button type="button" class="rg-tog" data-rtoggle="${key}" aria-expanded="${open}">${dot}<b>${esc(label)}</b>
+        ${items.length ? "" : '<span class="muted2">none yet</span>'}
+        <span class="drives">${drivesOf(items.map(i => i.path)).join(" ")}</span><span class="rg-n"></span>${items.length || key === "own" ? `<span class="chev">${ICON.r}</span>` : ""}</button>
+      ${key === "own" ? `<button type="button" class="btn btn-glass btn-sm" id="pickroot">Add folder…</button>` : ""}
+    </div>
+    <div class="rg-items">${items.map(i => `<label class="rline" title="${esc(i.path)}${i.tag ? " · " + esc(i.tag) : ""}"><input type="checkbox" ${attr}="${i.idx}" ${i.on ? "checked" : ""}><span>${pathLine(i.path)}</span></label>`).join("")}${extra}</div>
+  </div>`;
+}
+function rootGroupsHTML() {
+  const by = {};
+  P.rows.forEach((r, i) => (by[rootKind(r.path)] ||= []).push({path: r.path, on: r.on, idx: i, tag: r.tag}));
+  const steam = CFG.steamPath
+    ? groupRow("steam", "#66c0f4", "Steam libraries", P.steamLibs.map((l, i) => ({path: l.path, on: l.on, idx: i})), "data-slib",
+        `<small class="note">Also reads Steam's own files in <code>${esc(CFG.steamPath)}</code>: which games you own, your collections and cached artwork. Never your account or login.${CFG.consented ? "" : " Libraries in unusual places show up here after the first scan."}</small>`)
+    : `<div class="rgroup"><div class="rg-head"><input type="checkbox" disabled><span class="rg-tog"><span class="dot" style="background:#66c0f4"></span><b>Steam</b><span class="muted2">not found on this PC</span></span></div></div>`;
+  return steam + ROOT_KINDS.map(([key, color, label]) => {
+    const items = by[key] || [];
+    if (!items.length && key !== "own") return "";
+    return groupRow(key, color, label, items, "data-root", key === "own"
+      ? `<div class="addrow"><input type="text" id="rootin" placeholder="…or paste a path, e.g. D:\\MyGames" spellcheck="false" value="${esc(P.typed || "")}"><button class="btn btn-glass btn-sm" id="addroot">Add</button></div>` : "");
+  }).join("");
+}
+function syncGroups() {
+  /* group checkbox: all on = ticked, some = dash, none = empty; "3/4"; and the total in the header */
+  let on = 0, all = 0;
+  document.querySelectorAll(".rgroup").forEach(g => {
+    const boxes = [...g.querySelectorAll("[data-root],[data-slib]")], n = boxes.filter(b => b.checked).length;
+    on += n; all += boxes.length;
+    const head = g.querySelector("[data-rgroup]"); if (!head) return;
+    head.checked = !!boxes.length && n === boxes.length; head.indeterminate = n > 0 && n < boxes.length;
+    g.classList.toggle("off", !!boxes.length && !n);
+    const c = g.querySelector(".rg-n"); if (c) c.textContent = boxes.length ? `${n}/${boxes.length}` : "";
+  });
+  const f = $("#fcount"); if (f) f.textContent = `${on} of ${all} on`;
+  if (P.steamLibs.length) P.steam = P.steamLibs.some(l => l.on);   // no library ticked = Steam isn't read at all
+}
+const cleanPath = p => String(p || "").trim().replace(/^["']+|["']+$/g, "").trim().replace(/\//g, "\\").replace(/(.)\\+$/, "$1");
+const pathKey = p => cleanPath(p).toLowerCase();
+function addRoot(path, rerender = true) {
+  path = cleanPath(path); if (!path) return;
+  const ex = P.rows.find(r => pathKey(r.path) === pathKey(path));
+  if (ex) ex.on = true; else P.rows.push({path, on: true, tag: "added by you"});
+  P.open.add(rootKind(path));   // show where it landed
+  if (pathKey(P.typed) === pathKey(path)) P.typed = "";
+  if (rerender) renderPerms(modalKind);
+}
+async function savePerms() {
+  const typed = $("#rootin"); if (typed && typed.value.trim()) addRoot(typed.value, false);  // pasted but not "Add"-ed
+  const col = $("#optcol");
+  const body = {steam: P.steam, internet: P.internet, installed: P.installed, updates: P.updates,
+                steamOff: P.steamLibs.filter(l => !l.on).map(l => l.path),
+                roots: P.rows.filter(r => r.on).map(r => r.path),
+                showUnknownGames: P.showUnknown, lanCollectionName: col ? col.value.trim() || "LAN" : undefined};
+  const first = modalKind === "consent";
+  const r = await api(first ? "/api/consent" : "/api/config", body); if (!r) return;
+  const keptKeys = new Set((r.roots || []).map(pathKey));
+  const skipped = [...new Set(body.roots.map(pathKey))].filter(k => !keptKeys.has(k) && ![...keptKeys].some(x => k.startsWith(x + "\\")));
+  const orig = k => body.roots.find(r => pathKey(r) === k) || k;
+  if (skipped.length) toast(`Skipped ${skipped.length} folder(s) that don't exist, are a whole drive, or are inside LAN Hub: <code>${esc(skipped.map(orig).join(", "))}</code>`, "err", 6500);
+  modalKind = "settings"; closeModal();
+  toast(first ? "Thanks! Scanning now. The page fills in by itself." : "Saved, rescanning…", "ok");
+  poll();
+}
+document.addEventListener("input", e => { if (!P) return; if (e.target.id === "optcol") P.collection = e.target.value; if (e.target.id === "rootin") P.typed = e.target.value; });
+document.addEventListener("change", e => {
+  const t = e.target; if (!P) return;
+  if (t.dataset.perm) P[t.dataset.perm] = t.checked;
+  else if (t.dataset.root != null) { P.rows[+t.dataset.root].on = t.checked; syncGroups(); }
+  else if (t.dataset.slib != null) { P.steamLibs[+t.dataset.slib].on = t.checked; syncGroups(); }
+  else if (t.dataset.rgroup) {
+    t.closest(".rgroup").querySelectorAll("[data-root],[data-slib]").forEach(b => {
+      b.checked = t.checked;
+      if (b.dataset.root != null) P.rows[+b.dataset.root].on = t.checked; else P.steamLibs[+b.dataset.slib].on = t.checked;
+    });
+    syncGroups();
+  }
+});
+
+/* ================================================= launcher bridge */
+async function api(path, body) {
+  try {
+    const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json", "X-LANHub": "1"}, body: JSON.stringify(body || {})});
+    const j = await r.json(); if (!j.ok) throw new Error(j.error || "failed"); return j;
+  } catch (e) {
+    const down = e instanceof TypeError;  // fetch itself failed: server not running
+    toast(down ? "The launcher isn't running. Start <b>LAN Hub.exe</b>." : esc(e.message), "err", 5000);
+    if (down) { S.server = false; setStatus("off", "Launcher stopped · start LAN Hub.exe"); }
+    return null;
+  }
+}
+let pollT;
+async function poll() {
+  clearTimeout(pollT);
+  if (!SERVED) { setStatus("off", "Static mode · start the launcher to play"); renderBanner(); return; }
+  try {
+    const j = await (await fetch("/api/ping", {cache: "no-store"})).json();
+    if (S.version && j.version && j.version !== S.version) { location.reload(); return; }   // updated underneath us
+    S.version = j.version; S.restarting = false;
+    S.server = true; S.ips = j.ips || []; S.scanning = j.scanning; S.consented = j.consented;
+    S.error = j.error; S.update = j.update; S.allow = j.allow || {};
+    const inst = (j.installing || []).join("|");
+    if (inst !== (S.installing || []).join("|")) {
+      S.installing = j.installing || [];
+      for (const g of G) g._card = null;
+      if (modalKind === "game" && openId && byId[openId]) refreshModal();
+    }
+    if ((j.built && j.built !== (DATA && DATA.built)) || !S.loadedOnce) await reloadData();
+    if (j.error && !j.scanning) setStatus("err", "Scan failed: " + j.error);
+    else setStatus(j.scanning ? "busy" : "on", !j.consented ? "Waiting for your permission" : j.scanning ? `Scanning · ${j.phase}` : S.ips.length ? `Launcher online · IP ${S.ips[0]}` : "Launcher online");
+    if (!j.consented && modalKind !== "consent") openConsent();
+    else if (S.wantSettings && j.consented) { S.wantSettings = false; openSettings(); }
+  } catch { S.server = false; if (S.updating) S.restarting = true; setStatus("off", S.restarting ?"Restarting after the update…" : "Launcher stopped · start LAN Hub.exe"); }
+  renderBanner();
+  pollT = setTimeout(poll, S.scanning || S.restarting || (S.update && S.update.busy) || (S.installing || []).length ? 2000 : 15000);
+}
+async function reloadData() {
+  try {
+    const r = await fetch("data/games.json", {cache: "no-store"});
+    S.loadedOnce = true;
+    if (!r.ok) return;
+    setData(await r.json()); render(); footer();
+    // hero: keep the current slides if they still exist, otherwise pick new ones (bug 4)
+    heroList = heroList.map(g => byId[g.id]).filter(Boolean);
+    if (heroList.length < 3) pickHero(); else { heroIdx = Math.min(heroIdx, heroList.length - 1); showHero(); }
+    if (modalKind === "game" && openId && !byId[openId]) closeModal();
+    if (S.pendingG && byId[S.pendingG]) { openModal(S.pendingG); S.pendingG = null; }
+  } catch { S.loadedOnce = true; }
+}
+function setStatus(kind, txt) {
+  const el = $("#status"); el.className = "status glass " + kind; $("#statusTxt").textContent = txt;
+  el.title = S.ips.length ? "Friends connect to: " + S.ips.join(", ") + " (click to copy)" : txt;
+}
+async function act(action, id, url) {
+  const g = byId[id];
+  if (S.server) {
+    const j = await api("/api/do", {id, action, url}); if (!j) return;
+    if (action === "install" && !isArchive(g.installPath) && /\.(exe|msi)$/i.test(g.installPath || "")) {
+      toast(`📦 ${esc(g.title)} installer started. When it closes, LAN Hub looks for the game and the tile turns into <b>Play</b>.`, "ok", 6000);
+      S.installing = [...new Set([...(S.installing || []), id])]; g._card = null;
+      if (modalKind === "game" && openId === id) refreshModal();
+      poll(); return;
+    }
+    toast(action === "launch" ? `🚀 Launching ${esc(g.title)}…` : action === "install" ? `📦 Opening ${esc(g.title)}` :action === "folder" ? "📁 Folder opened" : (url.includes("install") ? "⬇️ Steam is installing " : "🚀 Steam is starting ") + esc(g.title), "ok");
+    return;
+  }
+  if (action === "steam" && url) { location.href = url; toast(`Handing ${esc(g.title)} to Steam…`, "ok"); return; }
+  const p = action === "launch" ? g.launchPath : action === "install" ? g.installPath : (g.folderPath || g.path);
+  copy(p, false);
+  toast(`Start <b>LAN Hub.exe</b> to do this from the page. Path copied: <code>${esc(p || "")}</code>`, "err", 6500);
+}
+function copy(text, notify = true) {
+  if (!text) return;
+  const done = () => notify && toast("Copied: " + esc(text), "ok");
+  const fallback = () => { const t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); done(); } catch {} t.remove(); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, fallback); else fallback();
+}
+function toast(html, kind = "", ms = 3200) {
+  const t = document.createElement("div"); t.className = `toast ${kind}`; t.innerHTML = html;
+  $("#toasts").appendChild(t);
+  setTimeout(() => { t.style.transition = "opacity .35s, transform .35s"; t.style.opacity = 0; t.style.transform = "translateY(10px)"; setTimeout(() => t.remove(), 350); }, ms);
+}
+
+/* ================================================= roulette */
+let roulWinner = null, rolling = false;
+function roll() {
+  const pool = baseList().filter(g => g.installed && !g.unknown && (S.squad > 1 ? (g.lan || g.couch >= S.squad) : true));
+  const final = pool;
+  if (rolling) return;
+  if (!final.length) { toast(G.length ? "No installed games match this filter and squad size. Try “Everything” or a smaller squad." : "No games scanned yet.", "err", 4500); return; }
+  if (!$("#roul").classList.contains("open")) lastFocus = document.activeElement;
+  rolling = true;
+  $("#roul").classList.add("open");
+  $("#roulTitle").textContent = S.squad > 1 ? `Rolling for a squad of ${S.squad}…` : "Rolling…";
+  $("#roulOpen").disabled = $("#reroll").disabled = true;
+  const slot = $("#slot"); slot.classList.remove("win");
+  const winner = final[Math.floor(Math.random() * final.length)];
+  let i = 0, delay = 45; const steps = 24;
+  const tick = () => {
+    const g = i >= steps ? winner : final[Math.floor(Math.random() * final.length)];
+    slot.innerHTML = g.img.cover ? `<img src="${esc(g.img.cover)}" alt="" decoding="sync">` : `<div class="ph" style="${phStyle(g)}">${esc(g.title)}</div>`;
+    $("#roulName").textContent = g.title; $("#roulSub").textContent = `${g.players} players · ${GENRE[g.genre] || g.genre}${g.lan ? " · LAN" : ""}`;
+    if (i++ < steps) { delay *= 1.11; setTimeout(tick, delay); }
+    else { slot.classList.add("win"); roulWinner = winner; rolling = false; $("#roulOpen").disabled = $("#reroll").disabled = false; $("#roulTitle").textContent = "Tonight you're playing"; $("#roulOpen").focus(); }
+  };
+  tick();
+}
+
+/* ================================================= events */
+document.addEventListener("click", async e => {
+  const t = e.target;
+  const cp = t.closest("[data-copy]"); if (cp) return copy(cp.dataset.copy);
+  const a = t.closest("[data-act]"); if (a) { e.stopPropagation(); return act(a.dataset.act, a.dataset.id, a.dataset.url); }
+  if ((t.closest("[data-close]") || t === $("#overlay")) && modalKind !== "consent") return closeModal();
+  if (t.closest("[data-banner]")) { S.banner = false; store.set("banner", false); return renderBanner(); }
+  if (t.closest("#pickroot")) { const b = t.closest("#pickroot"); b.disabled = true; toast("A folder picker opened (it can hide behind the browser).", "", 4000); const r = await api("/api/pickfolder"); b.disabled = false; if (r && r.path) addRoot(r.path); return; }
+  if (t.closest("#addroot")) { P.typed = ""; return addRoot($("#rootin").value); }
+  const rt = t.closest("[data-rtoggle]");
+  if (rt) {
+    const g = rt.closest(".rgroup"), k = rt.dataset.rtoggle, open = !g.classList.contains("open");
+    g.classList.toggle("open", open); rt.setAttribute("aria-expanded", open);
+    if (open) P.open.add(k); else P.open.delete(k);
+    if (open && k === "own") { const i = $("#rootin"); if (i) i.focus({preventScroll: true}); }
+    return;
+  }
+  if (t.closest("#permsave")) return savePerms();
+  if (t.closest("#rescan")) { if (await api("/api/rescan")) { toast("Rescanning…", "ok"); poll(); } return; }
+  const dn = t.closest("[data-done]");
+  if (dn) { if (await api("/api/installdone", {id: dn.dataset.done})) { toast("Looking for the installed game…", "ok"); setTimeout(poll, 800); } return; }
+  const lc = t.closest("[data-locate]");
+  if (lc) {
+    lc.disabled = true; toast("A file picker opened (it can hide behind the browser). Pick the game's .exe.", "", 5000);
+    const r = await api("/api/locate", {id: lc.dataset.locate}); lc.disabled = false;
+    if (r && r.path) { toast(`Got it: <code>${esc(r.path)}</code>. The tile turns into Play in a moment.`, "ok", 5000); setTimeout(poll, 800); }
+    return;
+  }
+  const fg = t.closest("[data-forget]");
+  if (fg) { if (await api("/api/forget", {id: fg.dataset.forget})) { toast("Forgotten. Rescanning…", "ok"); setTimeout(poll, 800); } return; }
+  if (t.closest("#updnow")) {
+    const b = t.closest("#updnow"); b.disabled = true;
+    if (await api("/api/update/install")) { S.updating = true; S.update = {...S.update, busy: true}; renderBanner(); poll(); } else b.disabled = false;
+    return;
+  }
+  if (t.closest("#updskip")) { store.set("skipUpdate", S.update && S.update.latest); return renderBanner(); }
+  if (t.closest("#updcheck")) { if (await api("/api/update/check")) { toast("Asking GitHub…", "ok"); setTimeout(async () => { await poll(); toast(S.update && S.update.available ? `LAN Hub ${esc(S.update.latest)} is available` : S.update && S.update.error ? esc(S.update.error) : "You have the latest version.", S.update && S.update.error ? "err" : "ok"); store.set("skipUpdate", ""); }, 2500); } return; }
+  const o = t.closest("[data-open]"); if (o) return openModal(o.dataset.open);
+  const c = t.closest(".card[data-id]"); if (c) return openModal(c.dataset.id);
+  const f = t.closest("[data-f]"); if (f) { S.filter = f.dataset.f; store.set("filter", S.filter); return scheduleRender(); }
+  const v = t.closest("[data-v]"); if (v) { S.view = v.dataset.v; store.set("view", S.view); return scheduleRender(); }
+  const h = t.closest("[data-h]"); if (h) { heroIdx = +h.dataset.h; return showHero(); }
+});
+document.addEventListener("keydown", e => {
+  const inInput = /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+  if (e.key === "Tab") {
+    if ($("#roul").classList.contains("open")) return trapTab(e, $("#roul"));
+    if (modalKind) return trapTab(e, $("#modal"));
+  }
+  if (e.key === "Escape") {
+    if ($("#roul").classList.contains("open")) { $("#roul").classList.remove("open"); restoreFocus(); }
+    else if (modalKind && modalKind !== "consent") closeModal();
+    else if (S.q) { $("#q").value = ""; S.q = ""; scheduleRender(); $("#q").blur(); }
+  }
+  else if (e.key === "/" && !inInput) { e.preventDefault(); $("#q").focus(); }
+  else if (e.key === "Enter" && document.activeElement.classList.contains("card")) openModal(document.activeElement.dataset.id);
+  else if (e.key === "Enter" && document.activeElement.id === "rootin") addRoot(document.activeElement.value);
+  else if (e.key === "Enter" && document.activeElement === $("#q")) { const first = $("#content .card"); if (first) openModal(first.dataset.id); }
+  else if ((e.key === "r" || e.key === "R") && !inInput && !modalKind) roll();
+});
+let qT;
+$("#q").addEventListener("input", e => {
+  clearTimeout(qT);
+  const v = e.target.value.trim();
+  qT = setTimeout(() => { if (v !== S.q) { S.q = v; scheduleRender(); if (v) scrollTo({top: Math.min(scrollY, $("#main").offsetTop - 70)}); } }, 90);
+});
+let sqT;
+const setSquad = n => { S.squad = Math.max(1, Math.min(64, n)); $("#sq").textContent = S.squad; store.set("squad", S.squad); clearTimeout(sqT); sqT = setTimeout(scheduleRender, 120); };
+$("#sqm").onclick = () => setSquad(S.squad - 1);
+$("#sqp").onclick = () => setSquad(S.squad + 1);
+$("#pick").onclick = roll; $("#reroll").onclick = roll;
+$("#gear").onclick = openSettings;
+$("#roulClose").onclick = () => { $("#roul").classList.remove("open"); restoreFocus(); };
+$("#roulOpen").onclick = () => { $("#roul").classList.remove("open"); lastFocus = null; S.focusReturn = $("#pick"); if (roulWinner) openModal(roulWinner.id); };
+$("#status").onclick = () => S.ips.length && copy(S.ips[0]);
+const syncTop = () => document.documentElement.style.setProperty("--top-h", $("#top").offsetHeight + "px");
+syncTop(); if (window.ResizeObserver) new ResizeObserver(syncTop).observe($("#top")); else addEventListener("resize", syncTop);
+let scrolled = false;
+addEventListener("scroll", () => { const s = scrollY > 20; if (s !== scrolled) { scrolled = s; $("#top").classList.toggle("scrolled", s); } }, {passive: true});
+document.addEventListener("error", e => {
+  const im = e.target;
+  if (im.tagName !== "IMG") return;
+  if (im.classList.contains("cover")) { const c = im.closest(".card"), g = c && byId[c.dataset.id]; if (g) { c.classList.add("noart"); im.outerHTML = `<div class="ph" style="${phStyle(g)}">${esc(g.title)}</div>`; } }
+  else if (im.classList.contains("lg") || im.classList.contains("logo")) { const h = document.createElement(im.classList.contains("lg") ? "h2" : "h1"); h.textContent = im.alt; im.replaceWith(h); }
+}, true);
+
+/* ================================================= boot */
+function footer() {
+  $("#built").textContent = G.length ? `${G.length} games · ${G.filter(g => g.installed).length} installed · ${G.filter(g => g.lan).length} LAN-capable · scanned ${DATA.built || "?"}${DATA.host ? " on " + DATA.host : ""}` : "";
+}
+setData(window.LAN_HUB);
+$("#sq").textContent = S.squad;
+footer(); render(); renderBanner(); pickHero(); poll();
+
+if (location.hash === "#settings") { S.wantSettings = true; history.replaceState(null, "", location.pathname); }
+if (location.hash.startsWith("#g/")) { let id = ""; try { id = decodeURIComponent(location.hash.slice(3)); } catch {} if (byId[id]) openModal(id); else S.pendingG = id; }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
+})();
+</script>
+</body>
+</html>

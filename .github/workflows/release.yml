@@ -1,0 +1,56 @@
+# Builds the public release zip from source, on GitHub's own Windows runner.
+#   push a tag v2.1.1 (must equal VERSION in app/tools/config.py)  ->  draft release with
+#   LAN-Hub-2.1.1.zip + LAN-Hub-2.1.1.zip.sha256   (review it, then click Publish)
+# Code signing (SignPath Foundation) slots in after "Build LAN Hub.exe" once the project is approved.
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches VERSION
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path app/tools/config.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and "v$v" -ne $env:GITHUB_REF_NAME) { throw "Tag $env:GITHUB_REF_NAME doesn't match VERSION $v" }
+          "VERSION=$v" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - name: Build LAN Hub.exe
+        shell: cmd
+        run: app\launcher\build.bat
+
+      # - name: Sign LAN Hub.exe (SignPath)      <- added after SignPath Foundation approval
+
+      - name: Add the official portable Python (checksum-verified)
+        shell: pwsh
+        run: |
+          $z = Join-Path $env:RUNNER_TEMP 'python-embed.zip'
+          Invoke-WebRequest 'https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip' -OutFile $z
+          if ((Get-FileHash $z -Algorithm SHA256).Hash -ne '8D3F33BE9EB810F23C102F08475AF2854E50484B8E4E06275E937BE61CE3D2FB') { throw 'Python download checksum mismatch' }
+          Expand-Archive $z -DestinationPath app\runtime\python
+
+      - name: Package
+        shell: pwsh
+        run: app\runtime\python\python.exe -I app\tools\package.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LAN-Hub-${{ env.VERSION }}
+          path: builds/*
+
+      - name: Draft the GitHub release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create $env:GITHUB_REF_NAME "builds/LAN-Hub-$env:VERSION.zip" "builds/LAN-Hub-$env:VERSION.zip.sha256" --draft --generate-notes --title "LAN Hub $env:VERSION"

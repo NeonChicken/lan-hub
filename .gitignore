@@ -1,0 +1,44 @@
+# AI assistant notes (never published)
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Your own library: paths, notes, games (see app/tools/curation_local.example.py)
+app/tools/curation_local.py
+
+# Personal helper that edits Steam's own collection files: not part of the app, never published
+app/tools/make_steam_collection.py
+
+# Personal data: scan results, Steam library, paths, consent, update downloads
+app/config.json
+app/config.json.*
+app/data/
+
+# Downloaded game artwork (copyrighted, re-downloaded on first scan)
+app/thumbs/
+
+# Bundled portable Python (goes in the release zip, not in git)
+app/runtime/
+
+# Build outputs (attach to a GitHub Release instead)
+builds/
+LAN Hub.exe
+*.zip
+*.zip.tmp
+*.sha256
+*.lanhub-old
+
+# Recordings of a personal library
+*.gif
+*.mp4
+
+# Python / editor junk
+__pycache__/
+*.pyc
+*.tmp
+*.bak
+*.log
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

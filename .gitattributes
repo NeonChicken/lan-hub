@@ -1,0 +1,7 @@
+* text=auto
+# cmd.exe needs Windows line endings, whatever the clone's settings
+*.bat text eol=crlf
+*.ico binary
+*.png binary
+*.jpg binary
+*.woff2 binary
